@@ -1,0 +1,24 @@
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Impacto">
+  <g stroke-width="15" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- topo (verde) -->
+    <g transform="rotate(0 60 60)">
+      <circle cx="60" cy="14" r="10" fill="#17cf74"/>
+      <path d="M32 26 L60 50 L88 26" stroke="#17cf74"/>
+    </g>
+    <!-- baixo (verde) -->
+    <g transform="rotate(180 60 60)">
+      <circle cx="60" cy="14" r="10" fill="#17cf74"/>
+      <path d="M32 26 L60 50 L88 26" stroke="#17cf74"/>
+    </g>
+    <!-- direita (branco) -->
+    <g transform="rotate(90 60 60)">
+      <circle cx="60" cy="14" r="10" fill="#ffffff"/>
+      <path d="M32 26 L60 50 L88 26" stroke="#ffffff"/>
+    </g>
+    <!-- esquerda (branco) -->
+    <g transform="rotate(270 60 60)">
+      <circle cx="60" cy="14" r="10" fill="#ffffff"/>
+      <path d="M32 26 L60 50 L88 26" stroke="#ffffff"/>
+    </g>
+  </g>
+</svg>

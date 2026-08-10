@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Impacto — Login</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body class="mobile">
+  <form class="card" id="form">
+    <img class="card-logo" src="/assets/img/impacto-logo.png" alt="Impacto"
+         onerror="this.onerror=null;this.src='/assets/img/impacto-mark.svg'">
+    <h1>Liberar painel</h1>
+    <p class="sub">Entre com sua conta <b>FullTrack</b> para liberar a TV.</p>
+    <div class="field">
+      <label for="login">Usuário</label>
+      <input id="login" name="login" autocomplete="username" autocapitalize="none" required>
+    </div>
+    <div class="field">
+      <label for="password">Senha</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <button class="primary" id="submit" type="submit">Entrar</button>
+    <div class="msg" id="msg"></div>
+  </form>
+  <script src="/assets/js/login.js"></script>
+</body>
+</html>

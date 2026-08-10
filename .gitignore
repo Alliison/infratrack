@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Config local (contém IP/ambiente da máquina; use .env.example como base)
+.env
+
+# Estado de runtime
+mosaic_config.json
+
+# SO / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

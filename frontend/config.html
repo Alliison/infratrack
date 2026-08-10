@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Impacto — Configurar mosaico</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body class="mobile">
+  <div class="card">
+    <img class="card-logo" src="/assets/img/impacto-logo.png" alt="Impacto"
+         onerror="this.onerror=null;this.src='/assets/img/impacto-mark.svg'">
+    <h1>Mosaico salvo</h1>
+    <p class="sub">Escolha os veículos e as preferências. Deixe tudo desmarcado para exibir <b>todos</b> os carros ligados.</p>
+
+    <div class="row2">
+      <div class="field">
+        <label for="zoom">Zoom</label>
+        <input id="zoom" type="number" min="3" max="19" value="15">
+      </div>
+      <div class="field">
+        <label for="refresh">Atualizar (s)</label>
+        <input id="refresh" type="number" min="3" max="60" value="6">
+      </div>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="only_ligados" checked> No mosaico, exibir só carros ligados</label>
+    </div>
+
+    <div class="field">
+      <label><input type="checkbox" id="rotativo"> Modo rotativo (alternar páginas)</label>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="rotate">Trocar a cada (s)</label>
+        <input id="rotate" type="number" min="3" max="120" value="15">
+      </div>
+      <div class="field">
+        <label for="page_size">Telas por página</label>
+        <input id="page_size" type="number" min="1" max="16" value="9">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Veículos <span id="selcount" class="sub"></span></label>
+      <input id="filter" placeholder="Filtrar por placa ou modelo…" autocapitalize="none" style="margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px;color:var(--muted);cursor:pointer">
+        <input type="checkbox" id="listOnlyLigados" style="width:18px;height:18px"> Mostrar só ligados na lista
+      </label>
+      <div class="veh-list" id="list">Carregando…</div>
+    </div>
+
+    <button class="secondary" id="clear" type="button">Limpar selecionados</button>
+    <button class="primary" id="save">Salvar mosaico</button>
+    <div class="msg" id="msg"></div>
+    <p class="sub" style="margin-top:16px"><a href="/" style="color:var(--accent)">← Voltar ao mosaico</a></p>
+  </div>
+  <script src="/assets/js/config.js"></script>
+</body>
+</html>

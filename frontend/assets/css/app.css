@@ -1,0 +1,147 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #131a22;
+  --border: #223040;
+  --text: #e7eef5;
+  --muted: #8aa0b3;
+  --on: #22c55e;
+  --off: #64748b;
+  --accent: #2f6bd0;      /* azul Impacto (legível no escuro) */
+  --navy: #0e2a5e;        /* azul Impacto profundo */
+  --brand: #17cf74;       /* verde Impacto */
+  --danger: #ef4444;
+}
+
+/* Marca Impacto */
+.brand-lockup { display: flex; align-items: center; gap: 10px; }
+.brand-logo { height: 28px; width: auto; display: block; }
+.brand-text { font-weight: 800; letter-spacing: 2px; color: var(--brand); font-size: 15px; }
+.logo-lg { height: 92px; width: auto; }
+.wordmark { font-weight: 800; letter-spacing: 3px; font-size: 30px; color: var(--brand); margin-top: 12px; }
+.card-logo { height: 54px; display: block; margin: 0 auto 14px; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  overflow: hidden;
+}
+
+/* ---------- Barra de status (TV) ---------- */
+#topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 44px; z-index: 500;
+  display: flex; align-items: center; gap: 16px; padding: 0 16px;
+  background: rgba(11,15,20,.85); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border); font-size: 14px;
+}
+#topbar .brand { font-weight: 700; letter-spacing: .5px; color: var(--accent); }
+#topbar .sep { flex: 1; }
+#topbar .stat { color: var(--muted); }
+#topbar .stat b { color: var(--text); }
+#topbar #count { color: var(--brand); }
+#topbar a.btn { color: var(--muted); text-decoration: none; border: 1px solid var(--border);
+  padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+#topbar a.btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* ---------- Grid do mosaico ---------- */
+#mosaic {
+  position: fixed; top: 44px; left: 0; right: 0; bottom: 0;
+  display: grid; gap: 2px; background: var(--border); padding: 2px;
+}
+.tile { position: relative; background: var(--panel); overflow: hidden; }
+.tile .map { position: absolute; inset: 0; }
+.tile.empty { display: flex; align-items: center; justify-content: center; color: var(--off); }
+
+/* faixa de destaque (placa -> velocímetro) */
+.tile .label {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 450;
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  background: var(--navy);
+  border-top: 3px solid var(--brand);
+  box-shadow: 0 -6px 18px rgba(0,0,0,.35);
+  font-size: 14px; pointer-events: none;
+}
+.tile .label .placa { font-weight: 800; font-size: 19px; letter-spacing: 1px; color: #fff; }
+.tile .label .meta { color: rgba(231,238,245,.72); font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .label .spd { margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  font-variant-numeric: tabular-nums; font-weight: 700; font-size: 16px; color: #fff; flex: none; }
+.tile .label .spd svg { width: 20px; height: 20px; color: var(--brand); }
+.tile .label .spd .spd-val { color: var(--brand); }
+.tile.offline .label { background: #1a2230; border-top-color: var(--off); }
+.tile.offline .label .spd, .tile.offline .label .spd svg, .tile.offline .label .spd .spd-val { color: var(--muted); }
+.tile .label .meta { color: var(--muted); font-size: 12px; }
+.tile .ign { width: 10px; height: 10px; border-radius: 50%; background: var(--off); }
+.tile .ign.on { background: var(--on); box-shadow: 0 0 8px var(--on); }
+
+/* ícone de carrinho */
+.car-mark { display:flex; align-items:center; justify-content:center; width: 30px; height: 30px; }
+.car-mark svg { filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); transition: transform .5s ease; }
+
+/* estado desligado: esmaece o quadrado e mostra a mensagem */
+.tile.offline .map { filter: grayscale(1) brightness(.42); }
+.tile.offline .label { opacity: .7; }
+.offline-msg { display: none; }
+.tile.offline .offline-msg {
+  display: flex; position: absolute; inset: 0; z-index: 460;
+  align-items: center; justify-content: center; padding: 14px; text-align: center;
+}
+.offline-msg .om-box { max-width: 90%; }
+.offline-msg .om-icon { font-size: 30px; margin-bottom: 8px; opacity: .8; }
+.offline-msg .om-title { font-weight: 700; color: var(--text); margin-bottom: 8px; font-size: 15px; }
+.offline-msg .om-text { color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+/* ---------- Overlays de QR (login / configurar) ---------- */
+#auth, #cfg { position: fixed; inset: 0; z-index: 1000; display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 30%, #16212d, #0b0f14); text-align: center; }
+#auth.show, #cfg.show { display: flex; }
+#auth h1, #cfg h1 { color: var(--accent); margin: 0 0 6px; font-size: 28px; letter-spacing: 1px; }
+#auth p, #cfg p { color: var(--muted); max-width: 460px; margin: 6px 0; }
+#auth .qrbox, #cfg .qrbox { background: #fff; padding: 18px; border-radius: 16px; margin: 22px 0 10px; }
+#auth .qrbox img, #cfg .qrbox img { display: block; width: 260px; height: 260px; }
+#auth .hint, #cfg .hint { font-size: 13px; }
+#auth .expired { color: var(--danger); }
+#cfg .btn { margin-top: 18px; color: var(--muted); text-decoration: none;
+  border: 1px solid var(--border); padding: 8px 22px; border-radius: 8px; }
+#cfg .btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* ---------- Páginas de celular (login/config) ---------- */
+.mobile { background: var(--bg); color: var(--text); min-height: 100%;
+  display: flex; align-items: flex-start; justify-content: center; overflow: auto; }
+.card { width: 100%; max-width: 420px; margin: 40px 16px; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+.card h1 { color: var(--accent); font-size: 22px; margin: 0 0 4px; }
+.card .sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.field input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+  background: #0e141b; color: var(--text); font-size: 16px; }
+.field input:focus { outline: none; border-color: var(--brand); }
+button.primary { width: 100%; padding: 13px; border: 0; border-radius: 10px; background: var(--accent);
+  color: #fff; font-weight: 700; font-size: 16px; cursor: pointer; }
+button.primary:disabled { opacity: .6; cursor: default; }
+button.secondary { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: transparent; color: var(--muted); font-weight: 600; font-size: 15px; cursor: pointer; margin-bottom: 10px; }
+button.secondary:hover { color: var(--text); border-color: var(--brand); }
+.msg { margin-top: 14px; font-size: 14px; min-height: 20px; }
+.msg.err { color: var(--danger); }
+.msg.ok { color: var(--on); }
+
+/* lista de veículos (config) */
+.veh-list { max-height: 60vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+.veh-row { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.veh-row:last-child { border-bottom: 0; }
+.veh-row:hover { background: rgba(255,255,255,.03); }
+.veh-row input { width: 20px; height: 20px; flex: none; }
+.veh-row .veh-info { display: flex; flex-direction: column; min-width: 0; }
+.veh-row .veh-placa { font-weight: 700; font-size: 16px; color: var(--text); line-height: 1.2; }
+.veh-row .veh-modelo { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.veh-row .badge { margin-left: auto; flex: none; font-size: 11px; font-weight: 700; padding: 4px 10px;
+  border-radius: 999px; text-transform: uppercase; letter-spacing: .4px; }
+.veh-row .badge.on { background: rgba(34,197,94,.16); color: var(--on); }
+.veh-row .badge.off { background: rgba(100,116,139,.20); color: var(--muted); }
+.row2 { display: flex; gap: 12px; }
+.row2 .field { flex: 1; }
