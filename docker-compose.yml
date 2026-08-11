@@ -1,0 +1,77 @@
+# TrackInfra — video-wall de rastreamento sobre a API do FullTrack.
+#
+# SEM servico de banco: nao ha nada relacional aqui. As sessoes vivem em
+# memoria por decisao de projeto (mantem a credencial do FullTrack fora do
+# disco — ver "Seguranca e limitacoes" no README) e o unico estado duravel e' o
+# mosaico salvo, um JSON no volume.
+#
+# SEM labels do traefik.*: o provider Docker do Traefik so enxerga containers do
+# mesmo host, e o Traefik roda no LXC 102. A rota e' arquivo em
+# /etc/traefik/dynamic/ (secao 4 do /opt/infra/README.md); a copia versionada
+# esta em deploy/traefik/trackinfra.yml.
+
+services:
+
+  api:
+    build: .
+    container_name: trackinfra
+    restart: unless-stopped
+
+    ports:
+      # So a interface interna, por onde o Traefik chega. Diferente do
+      # acompanhamento-baixas, aqui NAO se publica no tailnet: a pagina /login
+      # recebe usuario e senha do FullTrack em texto, entao quanto menos
+      # superficie melhor. A LAN chega pelo Traefik, que fala TLS valido.
+      - "172.21.1.10:8300:8300"
+
+    # TRACKINFRA_PUBLIC_BASE_URL vem daqui e e' o que vai dentro do QR-code —
+    # se estiver errado, o celular escaneia e nao abre nada.
+    env_file: backend/.env
+    environment:
+      # Sem .pyc: o rootfs e' somente-leitura e o Python tentaria escrever
+      # __pycache__ a cada import.
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    volumes:
+      # Unico ponto gravavel alem do /tmp. O TRACKINFRA_CONFIG_PATH do .env
+      # aponta para ca'; com o default relativo ("mosaic_config.json") o app
+      # tentaria escrever no rootfs read-only e o /api/config quebraria.
+      - trackinfra_data:/data
+
+    # --forwarded-allow-ips fixo no Traefik: o X-Forwarded-For so e' respeitado
+    # quando a conexao vem dele.
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8300
+      --proxy-headers --forwarded-allow-ips=172.21.1.2
+
+    # Servico leve: FastAPI, httpx e o Pillow do qrcode. Nao renderiza mapa —
+    # quem monta o mosaico e' o navegador da TV, com Leaflet. Comeca abaixo dos
+    # 512 MB da api do notificador; reavaliar com `memory.peak` do cgroup depois
+    # de uma semana de TV ligada (secao 7 do README da infra).
+    mem_limit: 384m
+    mem_reservation: 128m
+    memswap_limit: 768m
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8300/healthz', timeout=4).status==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  trackinfra_data:

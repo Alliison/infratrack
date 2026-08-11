@@ -1,0 +1,57 @@
+# Rota do TrackInfra (container na VM 100, porta 8300) — copia versionada.
+# O arquivo que vale roda no LXC 102: /etc/traefik/dynamic/trackinfra.yml
+# (`watch: true`, recarrega sozinho). Manter os dois em sincronia na mao.
+#
+# Tres routers, como n8n.yml e treininho.yml. O quarto do padrao antigo
+# (`-lan`, com PathPrefix) foi deliberadamente OMITIDO — mesmo motivo do
+# proxmox.yml: o front usa caminhos absolutos (/api, /assets, /login, /config)
+# e quebraria inteiro sob prefixo. Pela LAN o acesso e' pelo nome, que o
+# wildcard do dnsmasq ja resolve.
+#
+# ⚠️ Os DOIS redirects usam `https-redirect-8443`, nao o `https-redirect` sem
+# porta que a secao 3 do /opt/infra/README.md ainda mostra. O sem-porta manda
+# para https://<host>/ e a 443 publica esta fechada — de fora, beco sem saida
+# (a propria tabela "Pendente" do README marca isso). n8n.yml e treininho.yml
+# ja corrigiram; esta rota nasce corrigida.
+#
+# Acesso: https://infra.it.vistotrack.com:8443
+
+http:
+  routers:
+    trackinfra-secure:
+      rule: "Host(`infra.it.vistotrack.com`)"
+      entryPoints:
+        - websecure        # 443 — LAN
+        - websecure-alt    # 8443 — mesma porta do port forward externo
+      service: trackinfra-svc
+      tls:
+        certResolver: letsencrypt
+
+    trackinfra-redirect:
+      rule: "Host(`infra.it.vistotrack.com`)"
+      entryPoints:
+        - web
+      service: trackinfra-svc
+      middlewares:
+        - https-redirect-8443
+
+    # HTTP puro na 8443 (quem digita a URL sem "https://") — sem este router o
+    # Traefik devolve 404 e parece rota faltando. Ver secao 9 do README da infra.
+    trackinfra-redirect-alt:
+      rule: "Host(`infra.it.vistotrack.com`)"
+      entryPoints:
+        - websecure-alt
+      service: trackinfra-svc
+      middlewares:
+        - https-redirect-8443
+
+  services:
+    trackinfra-svc:
+      loadBalancer:
+        servers:
+          - url: "http://172.21.1.10:8300"
+        passHostHeader: true
+        healthCheck:
+          path: /healthz
+          interval: "30s"
+          timeout: "5s"
