@@ -55,7 +55,29 @@ async def login(user: str, password: str) -> FulltrackAuth:
         if not token or "access_token" not in token:
             raise AuthError("Usuário ou senha inválidos.")
 
-        return FulltrackAuth(cookies=cookies, token=token)
+        return FulltrackAuth(cookies=cookies, token=token,
+                             login_user=user, password=password)
+
+
+async def relogin(auth: FulltrackAuth) -> bool:
+    """Refaz o login com as credenciais guardadas em memória.
+
+    É o que segura a TV no ar sem QR novo: o cookie de sessão do FullTrack cai
+    sozinho depois de algumas horas. Devolve False se a sessão não tem
+    credenciais (veio de um handoff antigo); propaga AuthError se elas deixaram
+    de valer — aí só um QR novo resolve.
+    """
+    if not (auth.login_user and auth.password):
+        return False
+    seen = auth.token_obtained_at
+    async with auth.relogin_lock:
+        if auth.token_obtained_at > seen:
+            return True          # outra requisição já religou enquanto esperávamos
+        fresh = await login(auth.login_user, auth.password)
+        auth.cookies = fresh.cookies
+        auth.token = fresh.token
+        auth.token_obtained_at = fresh.token_obtained_at
+    return True
 
 
 async def refresh_token(auth: FulltrackAuth) -> None:
@@ -75,7 +97,17 @@ async def refresh_token(auth: FulltrackAuth) -> None:
 
 
 async def get_fleet(auth: FulltrackAuth) -> list[Vehicle]:
-    """Busca a frota inteira via getDados (backend legado, cookie de sessão)."""
+    """Busca a frota; se o cookie caiu, refaz o login e tenta de novo."""
+    try:
+        return await _fetch_fleet(auth)
+    except SessionExpired:
+        if not await relogin(auth):
+            raise
+        return await _fetch_fleet(auth)
+
+
+async def _fetch_fleet(auth: FulltrackAuth) -> list[Vehicle]:
+    """Uma tentativa de getDados (backend legado, cookie de sessão)."""
     async with httpx.AsyncClient(timeout=30, cookies=auth.cookies) as c:
         r = await c.post(
             f"{settings.fulltrack_base}/mapaGeral_v2/getDados",
@@ -89,8 +121,12 @@ async def get_fleet(auth: FulltrackAuth) -> list[Vehicle]:
 
 
 async def get_notifications_total(auth: FulltrackAuth) -> int:
-    """Contador de alertas não lidos (API nova, com auto-refresh em 401)."""
-    for attempt in (1, 2):
+    """Contador de alertas não lidos (API nova).
+
+    Em 401 tenta o refresh_token e, se ainda assim falhar, o re-login completo —
+    nunca derruba a sessão da TV por causa do contador.
+    """
+    for attempt in (1, 2, 3):
         async with httpx.AsyncClient(timeout=15) as c:
             r = await c.get(
                 f"{settings.fulltrack_api_base}/plataform/notification/total",
@@ -98,6 +134,13 @@ async def get_notifications_total(auth: FulltrackAuth) -> int:
             )
         if r.status_code == 401 and attempt == 1:
             await refresh_token(auth)
+            continue
+        if r.status_code == 401 and attempt == 2:
+            try:
+                if not await relogin(auth):
+                    return 0
+            except AuthError:
+                return 0
             continue
         j = _safe_json(r) or {}
         return int(j.get("total_unread", 0))

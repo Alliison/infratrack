@@ -2,7 +2,8 @@
 
 Dois tipos:
   - QRSession: efêmera, criada pela TV; vira "authorized" quando o celular loga.
-  - AppSession: sessão longa da TV, guarda os cookies + token do FullTrack.
+  - AppSession: sessão da TV, guarda os cookies + token do FullTrack. Não expira
+    por tempo (ttl 0); só some se o processo reiniciar ou no logout explícito.
 
 Em produção com múltiplas instâncias, trocar por Redis. Para uma TV/1 processo,
 memória é suficiente (e mantém as credenciais fora de disco).
@@ -22,6 +23,11 @@ class FulltrackAuth:
     cookies: dict[str, str]
     token: dict          # { access_token, refresh_token, expires_in, ... }
     token_obtained_at: float = field(default_factory=time.time)
+    # Guardadas só em RAM, para o re-login automático: o cookie de sessão do
+    # FullTrack cai sozinho e sem isto a TV voltaria para o QR.
+    login_user: Optional[str] = None
+    password: Optional[str] = None
+    relogin_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
 
 @dataclass
@@ -30,7 +36,7 @@ class AppSession:
     auth: FulltrackAuth
     created_at: float = field(default_factory=time.time)
     last_used_at: float = field(default_factory=time.time)
-    ttl: float = 0                    # 0 = usa settings.app_token_ttl
+    ttl: float = 0                    # 0 = usa settings.app_token_ttl (hoje: sem expirar)
 
 
 @dataclass
@@ -93,7 +99,7 @@ class SessionStore:
             if not s:
                 return None
             ttl = s.ttl or settings.app_token_ttl
-            if time.time() - s.created_at > ttl:
+            if ttl > 0 and time.time() - s.created_at > ttl:
                 self._app.pop(app_token, None)
                 return None
             s.last_used_at = time.time()
@@ -132,8 +138,10 @@ class SessionStore:
         for uuid in [u for u, s in self._qr.items()
                      if now - s.created_at > settings.qr_session_ttl and s.status != "authorized"]:
             self._qr.pop(uuid, None)
+        # ttl <= 0 = sessão perene (a da TV); só os tokens curtos do celular caem
         for tok in [t for t, s in self._app.items()
-                    if now - s.created_at > (s.ttl or settings.app_token_ttl)]:
+                    if (s.ttl or settings.app_token_ttl) > 0
+                    and now - s.created_at > (s.ttl or settings.app_token_ttl)]:
             self._app.pop(tok, None)
         for u in [u for u, h in self._handoff.items()
                   if now - h.created_at > settings.qr_session_ttl]:

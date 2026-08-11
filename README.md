@@ -55,6 +55,52 @@ Abra a TV em `http://<ip-do-servidor>:8000/`.
 > **celular** consegue acessar (IP na rede local ou domínio público). Se ficar
 > `localhost`, o QR-code não vai funcionar no telefone.
 
+## Deploy na infra (VM 100)
+
+Roda em `/opt/infratrack` na **VM 100** (`172.21.1.10`), junto dos outros
+containers. Topologia e procedimento completos em `/opt/infra/README.md`.
+
+| Item | Valor |
+|---|---|
+| URL | `https://infra.it.vistotrack.com:8443` |
+| Porta interna | `172.21.1.10:8300` (só a interface interna — o Traefik chega por ela) |
+| Rota do Traefik | `/etc/traefik/dynamic/trackinfra.yml` no LXC 102 — cópia em `deploy/traefik/` |
+| Banco | nenhum. Sessões em memória; mosaico salvo no volume `infratrack_trackinfra_data` |
+| Healthcheck | `/healthz`, no container e no Traefik |
+
+```bash
+docker compose up -d --build
+docker compose logs -f api
+```
+
+Publicar a rota. O `pct push` roda **no `nuc1`** e lê um arquivo local dele, e a
+VM 100 não tem chave para o LXC 102 — por isso o `scp` no meio do caminho:
+
+```bash
+scp deploy/traefik/trackinfra.yml nuc1:/tmp/trackinfra.yml
+ssh nuc1 'pct push 102 /tmp/trackinfra.yml /etc/traefik/dynamic/trackinfra.yml && rm /tmp/trackinfra.yml'
+# o pct push cria como root:root; as outras rotas sao traefik:traefik
+ssh nuc1 'pct exec 102 -- chown traefik:traefik /etc/traefik/dynamic/trackinfra.yml'
+ssh nuc1 'pct exec 102 -- journalctl -u traefik -n 30 --no-pager'   # erro de config aparece aqui
+```
+
+> O arquivo se chama `trackinfra.yml` (nome do serviço) mas serve o host
+> `infra.it.vistotrack.com`. Mesmo descasamento do `notification.yml`, que
+> serve `notificador.it.vistotrack.com`.
+
+> ⚠️ **`TRACKINFRA_PUBLIC_BASE_URL` com `:8443`.** É o que entra no QR-code.
+> Pela LAN o Traefik também escuta na 8443 (de propósito — seção 9 do README da
+> infra), então o mesmo endereço serve para celular no Wi-Fi e no 4G, com o
+> mesmo certificado Let's Encrypt.
+
+> ⚠️ **Validar o acesso externo só pelo 4G.** Toda conexão de saída na 8443 de
+> dentro da rede é interceptada e entregue ao Traefik local — `curl` da LAN
+> devolve 200 mesmo com o port forward desligado. Falso positivo garantido.
+
+> A TV precisa de **internet aberta**: o Leaflet vem do `unpkg.com` e os tiles
+> do `tile.openstreetmap.org`. O backend só fala com o FullTrack, saindo
+> NATeado pelo `nuc1`.
+
 ## Endpoints
 
 | Método | Rota | Descrição |
@@ -69,12 +115,17 @@ Abra a TV em `http://<ip-do-servidor>:8000/`.
 
 ## Segurança e limitações
 
-- Credenciais do FullTrack **nunca** são gravadas em disco (só ficam em memória,
-  na sessão do backend). Reiniciar o backend exige novo QR.
-- O QR expira em 5 min; o token da TV, em 7 dias (configurável).
-- Quando a sessão do FullTrack expira de vez, a TV volta a exibir o QR
-  (rescan rápido). Para operação 100% desatendida seria preciso guardar a senha
-  (criptografada) — **não implementado por padrão** por ser um trade-off de segurança.
+- Credenciais do FullTrack **nunca** são gravadas em disco. Ficam em memória, na
+  sessão do backend, e são usadas para o **re-login automático**: quando o cookie
+  do FullTrack cai, o backend refaz o login sozinho e a TV nem percebe.
+- O QR expira em 5 min; o token da TV **não expira** (`TRACKINFRA_APP_TOKEN_TTL=0`).
+  Só o token curto do handoff de configuração (celular) continua caindo em 15 min.
+- A TV só volta a exibir o QR em dois casos: **restart do backend** (as sessões são
+  em memória) ou **senha trocada no FullTrack** (o re-login passa a ser recusado e
+  o `/api/fleet` devolve 401). Instabilidade do FullTrack devolve 503 e a TV segue
+  com o último mosaico na tela, tentando de novo — não pisca para o QR.
+- Sobreviver a restart exigiria gravar a credencial em disco: **decisão consciente
+  de não fazer**, é o trade-off de segurança que mantém a senha só na RAM.
 - Sessões em memória: para múltiplas instâncias, migrar `sessions.py` para Redis.
 - API do FullTrack é **privada/não documentada** (v3.2.50) — pode mudar sem aviso.
   Verifique o contrato de uso antes de produção.

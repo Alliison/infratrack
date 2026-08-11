@@ -12,8 +12,13 @@ let lastFleet = [];        // última frota recebida (para o rodízio re-renderi
 let page = 0;              // página atual no modo rotativo
 let rotateTimer = null;
 let rotState = { on: null, secs: null };
+let authFails = 0;                 // 401 seguidos; só o limite abaixo volta ao QR
+const AUTH_FAILS_MAX = 5;
 
 const $ = (id) => document.getElementById(id);
+
+/* Erro passageiro: mantém o mosaico na tela e só avisa no rodapé. */
+function stale(msg) { $("updated").textContent = msg; }
 
 /* ---------------- Autenticação por QR ---------------- */
 async function startAuth() {
@@ -64,12 +69,18 @@ async function refreshFleet() {
   let list;
   try {
     const r = await fetch("/api/fleet", { headers: { Authorization: `Bearer ${token}` } });
-    if (r.status === 401) {              // sessão do FullTrack caiu -> novo QR
-      localStorage.removeItem(TOKEN_KEY); token = null;
+    if (r.status === 401) {
+      // O backend religa sozinho no FullTrack, então 401 aqui é sessão perdida
+      // de vez (restart do backend ou senha trocada). Tolera blips antes de
+      // mandar a TV para o QR — ela não deve piscar por um erro passageiro.
+      if (++authFails < AUTH_FAILS_MAX) return stale("reconectando…");
+      localStorage.removeItem(TOKEN_KEY); token = null; authFails = 0;
       return startAuth();
     }
+    if (!r.ok) return stale("FullTrack indisponível — tentando de novo…");
     list = await r.json();
-  } catch (_) { return; }               // falha de rede: mantém o último estado
+  } catch (_) { return stale("sem rede — tentando de novo…"); }
+  authFails = 0;
 
   lastFleet = list.filter(v => v.lat != null && v.lng != null);
   ensureRotation();

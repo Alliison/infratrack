@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Tempos de vida (segundos)
     qr_session_ttl: int = 300          # validade do QR-code
-    app_token_ttl: int = 60 * 60 * 24 * 7  # validade da sessão na TV
+    app_token_ttl: int = 0             # sessão da TV: 0 = nunca expira
 
     # Persistência do mosaico salvo
     config_path: str = "mosaic_config.json"

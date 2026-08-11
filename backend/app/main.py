@@ -1,6 +1,7 @@
 import io
 from pathlib import Path
 
+import httpx
 import qrcode
 from fastapi import Depends, FastAPI, HTTPException, Header
 from fastapi.responses import FileResponse, Response
@@ -86,16 +87,24 @@ async def logout(session: AppSession = Depends(current_session)):
 # ===== Dados =============================================================
 @app.get("/api/fleet", response_model=list[Vehicle])
 async def fleet(session: AppSession = Depends(current_session)):
+    """A sessão da TV não cai por instabilidade do FullTrack: o cliente já refaz
+    o login sozinho. Só credencial que deixou de valer (senha trocada) devolve
+    401 e manda a TV para um QR novo; o resto é 503 e a TV segue tentando."""
     try:
         return await fulltrack.get_fleet(session.auth)
-    except fulltrack.SessionExpired:
+    except fulltrack.AuthError as e:
         await store.drop_app(session.app_token)
-        raise HTTPException(status_code=401, detail="Sessão do FullTrack expirou.")
+        raise HTTPException(status_code=401, detail=str(e))
+    except (fulltrack.SessionExpired, httpx.HTTPError):
+        raise HTTPException(status_code=503, detail="FullTrack indisponível no momento.")
 
 
 @app.get("/api/notifications/total")
 async def notifications_total(session: AppSession = Depends(current_session)):
-    return {"total_unread": await fulltrack.get_notifications_total(session.auth)}
+    try:
+        return {"total_unread": await fulltrack.get_notifications_total(session.auth)}
+    except httpx.HTTPError:
+        return {"total_unread": 0}
 
 
 # ===== Configuração do mosaico salvo ====================================
