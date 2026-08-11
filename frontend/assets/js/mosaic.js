@@ -96,9 +96,6 @@ function gridDims(n) {
   return { rows, cols };
 }
 
-const OFFLINE_MSG = "Esse veículo não está mais rastreável em tempo real. " +
-  "Para ver sua última localização acesse o FullTrack ou configure novamente.";
-
 // Ícone de velocímetro (Material "speed")
 const SPEEDO_SVG = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.38 8.57l-1.23 1.85a8 8 0 0 1-.22 7.58H5.07A8 8 0 0 1 15.58 6.85l1.85-1.23A10 10 0 0 0 3.35 19a2 2 0 0 0 1.72 1h13.85a2 2 0 0 0 1.74-1 10 10 0 0 0-.27-10.44z"/><path d="M10.59 15.41a2 2 0 0 0 2.83 0l5.66-8.49-8.49 5.66a2 2 0 0 0 0 2.83z"/></svg>`;
 
@@ -180,11 +177,6 @@ function createTile(car) {
   el.className = "tile";
   el.innerHTML = `
     <div class="map"></div>
-    <div class="offline-msg"><div class="om-box">
-      <div class="om-icon">📴</div>
-      <div class="om-title"></div>
-      <div class="om-text">${OFFLINE_MSG}</div>
-    </div></div>
     <div class="label">
       <span class="ign"></span>
       <span class="placa"></span>
@@ -200,7 +192,7 @@ function createTile(car) {
   }).setView([car.lat, car.lng], cfg.zoom || 15);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
 
-  const marker = L.marker([car.lat, car.lng], { icon: carIcon(0, car.ignicao) }).addTo(map);
+  const marker = L.marker([car.lat, car.lng], { icon: carIcon(car.ignicao) }).addTo(map);
   const t = { map, marker, el, prev: [car.lat, car.lng] };
   tiles.set(car.id, t);
   return t;
@@ -219,15 +211,16 @@ function updateTile(t, car) {
   t.el.querySelector(".ign").className = "ign" + (car.ignicao ? " on" : "");
   const nome = formatPlaca(car.placa) || car.modelo || car.id;
   t.el.querySelector(".placa").textContent = nome;
-  t.el.querySelector(".om-title").textContent = nome + " · desligado";
   t.el.querySelector(".spd-val").textContent = off ? "—" : Math.round(car.velocidade) + " km/h";
   t.el.querySelector(".meta").textContent =
     [car.modelo, car.motorista, car.data_gps].filter(Boolean).join(" · ");
 }
 
-// Ícone de carro (Material Design "directions_car"); verde ligado, cinza desligado.
+// Ícone de carro (Material Design "directions_car"); verde ligado, vermelho
+// desligado — é o que sinaliza o veículo parado, já que o tile não traz mais
+// mensagem. O mapa esmaecido em cinza continua sendo o segundo sinal.
 function carIcon(on) {
-  const color = on ? "#17cf74" : "#8aa0b3";
+  const color = on ? "#17cf74" : "#ef4444";
   return L.divIcon({
     className: "",
     html: `<div class="car-mark">

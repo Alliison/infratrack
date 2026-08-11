@@ -80,18 +80,12 @@ body {
 .car-mark { display:flex; align-items:center; justify-content:center; width: 30px; height: 30px; }
 .car-mark svg { filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); transition: transform .5s ease; }
 
-/* estado desligado: esmaece o quadrado e mostra a mensagem */
-.tile.offline .map { filter: grayscale(1) brightness(.42); }
+/* Estado desligado: esmaece o quadrado; o carro fica vermelho (ver carIcon).
+   ⚠️ O filtro vai no tile-pane do Leaflet, NAO no .map inteiro: no .map ele
+   alcancaria tambem o marker-pane e o grayscale comeria o vermelho do icone —
+   que e' justamente o sinal de "desligado" desde que a mensagem saiu daqui. */
+.tile.offline .map .leaflet-tile-pane { filter: grayscale(1) brightness(.42); }
 .tile.offline .label { opacity: .7; }
-.offline-msg { display: none; }
-.tile.offline .offline-msg {
-  display: flex; position: absolute; inset: 0; z-index: 460;
-  align-items: center; justify-content: center; padding: 14px; text-align: center;
-}
-.offline-msg .om-box { max-width: 90%; }
-.offline-msg .om-icon { font-size: 30px; margin-bottom: 8px; opacity: .8; }
-.offline-msg .om-title { font-weight: 700; color: var(--text); margin-bottom: 8px; font-size: 15px; }
-.offline-msg .om-text { color: var(--muted); font-size: 13px; line-height: 1.45; }
 
 /* ---------- Overlays de QR (login / configurar) ---------- */
 #auth, #cfg { position: fixed; inset: 0; z-index: 1000; display: none;
