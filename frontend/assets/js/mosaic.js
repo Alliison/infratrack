@@ -106,18 +106,25 @@ function formatPlaca(p) {
   return /^[A-Z]{3}[0-9]{4}$/.test(s) ? s.slice(0, 3) + "-" + s.slice(3) : s;
 }
 
-// Decide quais veículos entram no mosaico, ordenados (ligados primeiro).
+// Grades fixas que o modal do celular oferece; fora delas, grade automática.
+const GRIDS = { "2x2": { rows: 2, cols: 2 }, "2x3": { rows: 2, cols: 3 } };
+
+// Decide quais veículos entram no mosaico e em que ordem.
 function computeDisplayed(fleet) {
   const byId = new Map(fleet.map(v => [v.id, v]));
-  const sel = new Set(cfg.selected_ids || []);
+  const sel = cfg.selected_ids || [];
   let ids;
-  if (sel.size) {
-    ids = [...sel].filter(id => byId.has(id));
+  if (sel.length) {
+    ids = sel.filter(id => byId.has(id));
   } else {
     const ligados = fleet.filter(v => cfg.only_ligados === false || v.ignicao).map(v => v.id);
     ids = [...new Set([...ligados, ...tiles.keys()])].filter(id => byId.has(id));
   }
-  ids.sort((a, b) => (byId.get(b).ignicao ? 1 : 0) - (byId.get(a).ignicao ? 1 : 0));
+  // Com sequência manual, a ordem de selected_ids é a que a pessoa montou no
+  // celular; jogar os ligados para a frente destruiria justamente isso.
+  if (!cfg.sequencia_manual) {
+    ids.sort((a, b) => (byId.get(b).ignicao ? 1 : 0) - (byId.get(a).ignicao ? 1 : 0));
+  }
   return { byId, ids };
 }
 
@@ -138,12 +145,16 @@ function render(fleet) {
 
   // paginação (modo rotativo)
   const rot = !!cfg.rotativo;
-  const pageSize = Math.max(1, cfg.page_size || 9);
+  // Grade fixa manda no tamanho da página: 2×2 são 4 telas, 2×3 são 6. Sem ela,
+  // vale o page_size e a grade sai do número de carros.
+  const fixo = GRIDS[cfg.grid];
+  const pageSize = fixo ? fixo.rows * fixo.cols : Math.max(1, cfg.page_size || 9);
   const pages = rot ? Math.max(1, Math.ceil(allIds.length / pageSize)) : 1;
   if (page >= pages) page = 0;
-  const ids = rot ? allIds.slice(page * pageSize, page * pageSize + pageSize) : allIds;
+  const ids = rot ? allIds.slice(page * pageSize, page * pageSize + pageSize)
+                  : allIds.slice(0, fixo ? pageSize : allIds.length);
 
-  const { rows, cols } = gridDims(rot && pages > 1 ? pageSize : ids.length);
+  const { rows, cols } = fixo || gridDims(rot && pages > 1 ? pageSize : ids.length);
   $("grid").textContent = ids.length ? `${rows}×${cols}` : "–";
   $("count").textContent = live;
   $("page").textContent = rot && pages > 1 ? `pág ${page + 1}/${pages}` : "";

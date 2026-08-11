@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -36,10 +36,17 @@ class Vehicle(BaseModel):
 
 
 class MosaicConfig(BaseModel):
-    selected_ids: list[str] = []   # vazio = todos os veículos
+    selected_ids: list[str] = []   # vazio = todos os veículos; a ORDEM importa
+                                   # quando sequencia_manual estiver ligado
     only_ligados: bool = True      # exibir só carros com ignição ligada
     zoom: int = 15
     refresh_seconds: int = 6
     rotativo: bool = False          # alternar páginas automaticamente
     rotate_seconds: int = 15        # segundos por página (configurável)
     page_size: int = 9              # telas por página no modo rotativo
+
+    # Escolhidos no modal de confirmação do celular. "auto" mantém o
+    # comportamento antigo: grade deduzida da quantidade de carros e ligados
+    # na frente. É para onde o botão "Seguir automático" devolve tudo.
+    grid: Literal["auto", "2x2", "2x3"] = "auto"
+    sequencia_manual: bool = False  # respeitar a ordem de selected_ids

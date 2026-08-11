@@ -27,37 +27,68 @@
       </div>
     </div>
     <div class="field">
-      <label><input type="checkbox" id="only_ligados" checked> No mosaico, exibir só carros ligados</label>
-    </div>
-
-    <div class="field">
-      <label><input type="checkbox" id="rotativo"> Modo rotativo (alternar páginas)</label>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label for="rotate">Trocar a cada (s)</label>
-        <input id="rotate" type="number" min="3" max="120" value="15">
-      </div>
-      <div class="field">
-        <label for="page_size">Telas por página</label>
-        <input id="page_size" type="number" min="1" max="16" value="9">
-      </div>
+      <label class="check"><input type="checkbox" id="only_ligados" checked> No mosaico, exibir só carros ligados</label>
     </div>
 
     <div class="field">
       <label>Veículos <span id="selcount" class="sub"></span></label>
       <input id="filter" placeholder="Filtrar por placa ou modelo…" autocapitalize="none" style="margin-bottom:8px">
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px;color:var(--muted);cursor:pointer">
-        <input type="checkbox" id="listOnlyLigados" style="width:18px;height:18px"> Mostrar só ligados na lista
+      <label class="check" style="margin-bottom:8px">
+        <input type="checkbox" id="listOnlyLigados"> Mostrar só ligados na lista
       </label>
       <div class="veh-list" id="list">Carregando…</div>
     </div>
 
     <button class="secondary" id="clear" type="button">Limpar selecionados</button>
-    <button class="primary" id="save">Salvar mosaico</button>
+    <button class="primary" id="save">Continuar</button>
     <div class="msg" id="msg"></div>
     <p class="sub" style="margin-top:16px"><a href="/" style="color:var(--accent)">← Voltar ao mosaico</a></p>
   </div>
+
+  <!-- Confirmacao: abre depois de escolher os veiculos e e' onde se decide o
+       layout. "Seguir automatico" sai daqui sem impor nada — salva so' a
+       selecao e devolve grade/sequencia para o automatico de sempre. -->
+  <div class="modal" id="confirm">
+    <div class="modal-box">
+      <h2>Confirmar mosaico</h2>
+      <p class="sub" id="cf-resumo"></p>
+
+      <div class="field">
+        <label>Grade</label>
+        <div class="choice" id="cf-grid">
+          <button type="button" data-grid="auto" class="on">Automática</button>
+          <button type="button" data-grid="2x2">2×2</button>
+          <button type="button" data-grid="2x3">2×3</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="check"><input type="checkbox" id="cf-rotativo"> Rodízio de páginas</label>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="cf-rotate">Trocar a cada (s)</label>
+          <input id="cf-rotate" type="number" min="3" max="120" value="15">
+        </div>
+        <div class="field">
+          <label for="cf-page-size">Telas por página</label>
+          <input id="cf-page-size" type="number" min="1" max="16" value="9">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Sequência <span class="sub">na ordem em que você marcou</span></label>
+        <div class="seq" id="cf-seq"></div>
+      </div>
+
+      <div class="msg" id="cf-aviso"></div>
+
+      <button class="primary" id="cf-apply">Aplicar esta configuração</button>
+      <button class="secondary" id="cf-auto">Seguir automático</button>
+      <button class="secondary" id="cf-cancel" type="button">Voltar</button>
+    </div>
+  </div>
+
   <script src="/assets/js/config.js"></script>
 </body>
 </html>
