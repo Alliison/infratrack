@@ -274,6 +274,31 @@ $("cfgbtn").addEventListener("click", async (e) => {
 });
 $("cfgclose").addEventListener("click", (e) => { e.preventDefault(); closeCfg(); });
 
+/* ---------------- Auto-update do front ---------------- */
+/* A TV fica meses com a mesma aba aberta e não tem teclado: publicar front novo
+   dependia de alguém subir lá e recarregar. Aqui ela pergunta ao servidor qual
+   é a versão do front e, quando muda, se recarrega sozinha. Roda fora do ciclo
+   de dados de propósito — assim funciona até na tela do QR-code. */
+const VERSION_EVERY_MS = 60000;
+let myVersion = null;
+
+async function checkVersion() {
+  let version;
+  try {
+    ({ version } = await (await fetch("/api/version", { cache: "no-store" })).json());
+  } catch (_) { return; }                 // sem rede: tenta no próximo ciclo
+  if (!version) return;
+  if (myVersion === null) { myVersion = version; return; }
+  if (version === myVersion) return;
+  // Não puxa o tapete de quem está com o QR de configuração aberto no celular.
+  if ($("cfg").classList.contains("show")) return;
+  stale("nova versão disponível — atualizando…");
+  setTimeout(() => location.reload(), 1500);
+}
+
+checkVersion();
+setInterval(checkVersion, VERSION_EVERY_MS);
+
 /* ---------------- Relógio ---------------- */
 setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("pt-BR"); }, 1000);
 

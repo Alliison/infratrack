@@ -1,10 +1,11 @@
+import hashlib
 import io
 from pathlib import Path
 
 import httpx
 import qrcode
 from fastapi import Depends, FastAPI, HTTPException, Header
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import fulltrack, storage
@@ -16,6 +17,40 @@ from .sessions import AppSession, store
 app = FastAPI(title="TrackInfra", version="1.0.0")
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
+
+
+def _asset_version() -> str:
+    """Impressao digital do front servido.
+
+    E' o que permite a TV se atualizar sozinha: ela guarda esta string no load e
+    recarrega quando ela muda. Derivada do CONTEUDO dos arquivos, nunca da hora
+    de boot — com timestamp, todo restart do backend recarregaria os paineis a
+    toa, e um deploy que nao mexeu no front nao deve mexer na tela de ninguem.
+    """
+    h = hashlib.sha256()
+    for p in sorted(FRONTEND.rglob("*")):
+        if p.is_file():
+            h.update(p.relative_to(FRONTEND).as_posix().encode())
+            h.update(p.read_bytes())
+    return h.hexdigest()[:12]
+
+
+ASSET_VERSION = _asset_version()
+
+
+class NoCacheStatic(StaticFiles):
+    """Assets com `Cache-Control: no-cache` (revalida sempre, 304 se igual).
+
+    Sem isto o StaticFiles nao manda Cache-Control nenhum, e o navegador fica
+    livre para servir do cache por heuristica. Numa TV que nunca se reinicia,
+    isso significaria recarregar e continuar com o JS velho — o auto-update
+    entraria em loop, achando que a versao nova nunca chega.
+    """
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
 
 
 # ----- dependência de autenticação (token do nosso app) -------------------
@@ -171,9 +206,21 @@ async def healthz():
     return {"ok": True}
 
 
+@app.get("/api/version")
+async def version():
+    """Versao do front. A TV compara com a que carregou e se recarrega sozinha
+    quando muda — e' o unico jeito de publicar front novo num painel de parede,
+    que nao tem quem aperte F5."""
+    return JSONResponse({"version": ASSET_VERSION},
+                        headers={"Cache-Control": "no-store"})
+
+
 @app.get("/")
 async def index():
-    return FileResponse(FRONTEND / "index.html")
+    # no-cache tambem aqui: de nada adianta a TV recarregar se o proprio HTML
+    # vier do cache apontando para os assets antigos.
+    return FileResponse(FRONTEND / "index.html",
+                        headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/login")
@@ -186,4 +233,4 @@ async def config_page():
     return FileResponse(FRONTEND / "config.html")
 
 
-app.mount("/assets", StaticFiles(directory=FRONTEND / "assets"), name="assets")
+app.mount("/assets", NoCacheStatic(directory=FRONTEND / "assets"), name="assets")
