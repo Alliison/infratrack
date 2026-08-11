@@ -141,6 +141,21 @@ async def config_handoff_qr(uuid: str):
                     headers={"Cache-Control": "no-store"})
 
 
+@app.get("/api/config/handoff/{uuid}/status")
+async def config_handoff_status(uuid: str):
+    """A TV faz polling aqui enquanto exibe o QR de configuracao e fecha o
+    overlay sozinha quando o celular le'. Numa TV de parede, depender de alguem
+    achar o mouse para clicar em "Fechar" e' o que se quer evitar.
+
+    Sumiu do store = expirou (o _gc leva embora depois do qr_session_ttl); para
+    a TV da' no mesmo que "usado": nos dois casos o QR na tela nao serve mais.
+    """
+    h = await store.get_handoff(uuid)
+    if not h:
+        return {"status": "expired"}
+    return {"status": "used" if h.used else "pending"}
+
+
 @app.post("/api/config/handoff/{uuid}/redeem")
 async def config_handoff_redeem(uuid: str):
     """O celular troca o UUID do QR por um token curto para configurar."""

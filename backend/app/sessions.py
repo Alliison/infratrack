@@ -118,6 +118,10 @@ class SessionStore:
             self._handoff[uuid] = h
             return h
 
+    async def get_handoff(self, uuid: str) -> Optional[HandoffSession]:
+        async with self._lock:
+            return self._handoff.get(uuid)
+
     async def redeem_handoff(self, uuid: str) -> Optional[str]:
         """Troca única: devolve um token curto (15 min) para o celular."""
         async with self._lock:

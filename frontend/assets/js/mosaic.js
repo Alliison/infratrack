@@ -243,6 +243,13 @@ function bearing(a, b) {
 }
 
 /* ---------------- Botão Configurar (QR para o celular) ---------------- */
+let cfgPoll = null;
+
+function closeCfg() {
+  $("cfg").classList.remove("show");
+  clearInterval(cfgPoll); cfgPoll = null;
+}
+
 $("cfgbtn").addEventListener("click", async (e) => {
   e.preventDefault();
   if (!token) return startAuth();
@@ -251,15 +258,21 @@ $("cfgbtn").addEventListener("click", async (e) => {
       method: "POST", headers: { Authorization: `Bearer ${token}` },
     });
     if (!r.ok) throw new Error();
-    const s = await r.json();
-    $("cfgqr").src = s.qr_url;
+    const h = await r.json();
+    $("cfgqr").src = h.qr_url;
     $("cfg").classList.add("show");
+    // Fecha sozinho assim que o celular ler o QR: ninguém precisa voltar na TV
+    // para clicar em "Fechar" (o botão fica só como saída manual).
+    clearInterval(cfgPoll);
+    cfgPoll = setInterval(async () => {
+      try {
+        const st = await (await fetch(`/api/config/handoff/${h.uuid}/status`)).json();
+        if (st.status !== "pending") closeCfg();
+      } catch (_) { /* rede: tenta no próximo ciclo */ }
+    }, 2000);
   } catch (_) { /* ignora */ }
 });
-$("cfgclose").addEventListener("click", (e) => {
-  e.preventDefault();
-  $("cfg").classList.remove("show");
-});
+$("cfgclose").addEventListener("click", (e) => { e.preventDefault(); closeCfg(); });
 
 /* ---------------- Relógio ---------------- */
 setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("pt-BR"); }, 1000);
