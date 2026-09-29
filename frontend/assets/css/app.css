@@ -406,6 +406,9 @@ body {
   font-size: var(--fs-tech-head); text-transform: uppercase; letter-spacing: .3px;
   border: 1px solid var(--border); color: var(--muted); }
 .badge.ok { color: #22c55e; border-color: #22c55e; }
+.badge.os-warn { color: #fbbf24; border-color: rgba(251,191,36,.55); background: rgba(251,191,36,.08); }
+.badge.os-work { color: #60a5fa; border-color: rgba(96,165,250,.55); background: rgba(96,165,250,.08); }
+.tech-sub { display: flex; flex-wrap: wrap; gap: .4em; }
 .badge.off { color: #f87171; border-color: rgba(248,113,113,.45); background: rgba(248,113,113,.08); }
 .tech-row .tech-sub { font-size: var(--fs-tech-head); color: var(--muted); }
 .tech-row .tech-name { text-align: left; font-weight: 700; color: var(--text);

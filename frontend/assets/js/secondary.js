@@ -214,6 +214,16 @@ function renderTechnicians(rows, advance = false) {
                        : "Sem OS em execução";
       sub.append(badge);
     }
+    // 2º badge = status da OS em execução (mesmo texto da coluna "Status" do
+    // detalhe). Sem OS, não aparece — o detalhe já avisa "Sem OS em execução".
+    const cur = info.currentServiceOrder;
+    if (cur && cur.status) {
+      const osBadge = document.createElement("span");
+      osBadge.className = "badge os-" + (OS_STATUS_TONE[cur.status] || "idle");
+      osBadge.textContent = OS_STATUS_LABEL[cur.status] || cur.status;
+      osBadge.title = `OS ${cur.code || ""}`.trim();
+      sub.append(osBadge);
+    }
 
     const who = document.createElement("div");
     who.className = "tech-who";
@@ -240,6 +250,13 @@ const OS_STATUS_LABEL = {
   scheduled: "Agendada", rescheduled: "Agendada", in_motion: "Em deslocamento",
   arrived: "No local", checklist: "Checklist", provision: "Provisionamento",
   products_used: "Produtos utilizados",
+};
+
+// Cor do badge da OS por fase: a caminho/no local (âmbar), em atendimento
+// (azul). Status novo/desconhecido cai em cinza, como o texto cru.
+const OS_STATUS_TONE = {
+  in_motion: "warn", arrived: "warn",
+  checklist: "work", provision: "work", products_used: "work",
 };
 
 // Horário em Brasília, independente do fuso do navegador da TV. Sem sufixo de
