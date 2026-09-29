@@ -15,7 +15,7 @@
      hoje" + os 3 indicadores solo). Fica no :root pra não duplicar o clamp()
      se algo mais um dia precisar do mesmo valor (já aconteceu, com
      #tertiary, e os dois desalinharam quando só um foi atualizado). */
-  --tv-top-row-h: clamp(120px, 14vh, 205px);
+  --tv-top-row-h: clamp(105px, 12vh, 180px);
 }
 
 /* Marca Impacto */
@@ -126,24 +126,24 @@ body {
      ganhar mais uma linha no futuro sem reconferir aqui. Valor em
      `--tv-top-row-h` (:root), compartilhado com #tertiary. */
   grid-template-rows: var(--tv-top-row-h) 1fr;
-  gap: 1.6vh;
-  padding: 1.6vh;
+  gap: 1.2vh;
+  padding: 1.2vh;
 
-  --fs-title: clamp(15px, 1.7vh, 26px);
-  --fs-big: clamp(42px, 5.6vh, 96px);
-  --fs-big-half: clamp(46px, 6.1vh, 104px);
-  --fs-cap: clamp(13px, 1.5vh, 22px);
-  --fs-stat-label: clamp(11px, 1.3vh, 20px);
-  --fs-stat-value: clamp(12px, 1.5vh, 23px);
-  --fs-msg: clamp(15px, 1.7vh, 24px);
-  --fs-city-name: clamp(17px, 2vh, 28px);
-  --fs-city-count: clamp(18px, 2.2vh, 30px);
-  --fs-cat-name: clamp(17px, 2vh, 28px);
-  --fs-cat-count: clamp(15px, 1.7vh, 24px);
-  --fs-chip-label: clamp(10px, 1.1vh, 16px);
-  --fs-chip-value: clamp(16px, 1.9vh, 26px);
-  --sp-card: clamp(10px, 1.3vh, 22px);      /* padding vertical dos cards */
-  --sp-card-x: clamp(12px, 1.6vh, 24px);    /* padding horizontal dos cards */
+  --fs-title: clamp(10px, min(1.5vh, .8vw), 22px);
+  --fs-big: clamp(30px, min(5vh, 3.2vw), 86px);
+  --fs-big-half: clamp(34px, min(5.4vh, 3.6vw), 92px);
+  --fs-cap: clamp(12px, 1.35vh, 20px);
+  --fs-stat-label: clamp(8px, min(1.15vh, .6vw), 17px);
+  --fs-stat-value: clamp(9px, min(1.3vh, .68vw), 20px);
+  --fs-msg: clamp(13px, 1.5vh, 21px);
+  --fs-city-name: clamp(15px, 1.75vh, 25px);
+  --fs-city-count: clamp(16px, 1.95vh, 26px);
+  --fs-cat-name: clamp(15px, 1.75vh, 25px);
+  --fs-cat-count: clamp(13px, 1.5vh, 21px);
+  --fs-chip-label: clamp(9px, 1vh, 14px);
+  --fs-chip-value: clamp(14px, 1.65vh, 23px);
+  --sp-card: clamp(8px, 1vh, 18px);      /* padding vertical dos cards */
+  --sp-card-x: clamp(10px, 1.3vh, 20px);    /* padding horizontal dos cards */
   /* Estas três existem porque `em` só escala com a tela em cima de um
      elemento que TEM font-size próprio (var(--fs-*)) — um `<div>` só de
      layout (.row, .city-row, .cities…) não tem texto nenhum, herda o
@@ -151,9 +151,9 @@ body {
      cai no padrão do navegador (16px), fixo, por mais vh que a gente escreva
      do lado. Foi assim que boa parte do espaçamento ficou "responsivo só de
      mentira" — só as fontes escalavam, o respiro em volta delas não. */
-  --sp-gap: clamp(6px, .9vh, 18px);         /* título -> número, igual nos dois estilos de card */
-  --sp-tight: clamp(4px, .5vh, 10px);       /* linhas de cidade/categoria/status */
-  --sp-med: clamp(8px, 1vh, 18px);          /* acima da lista de cidades */
+  --sp-gap: clamp(4px, .6vh, 12px);         /* título -> número, igual nos dois estilos de card */
+  --sp-tight: clamp(3px, .35vh, 7px);       /* linhas de cidade/categoria/status */
+  --sp-med: clamp(6px, .7vh, 12px);          /* acima da lista de cidades */
 }
 
 /* Fileira de cima: "Conclusão de hoje" ocupa o dobro da largura de cada
@@ -168,7 +168,7 @@ body {
    tirar dela e a linha única de concluídas/improdutivas/fechadas (ver
    .stats-compact) parou de caber numa linha só — ela precisa da largura
    inteira que já tinha. */
-.top-row { display: grid; grid-template-columns: 2.2fr .95fr 1.2fr .95fr; gap: 1.2vh; }
+.top-row { display: grid; grid-template-columns: 2.2fr .95fr 1.3fr .95fr; gap: 1.2vh; }
 
 .card {
   background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
@@ -291,7 +291,7 @@ body {
    redundante e desperdiçava espaço que aqui é mais apertado (metade da
    largura, 2 colunas). */
 .category-row { display: flex; align-items: baseline; gap: var(--sp-tight);
-  padding: var(--sp-med) clamp(14px, 2vh, 28px) var(--sp-tight); }
+  padding: var(--sp-med) clamp(10px, 1.4vh, 20px) var(--sp-tight); }
 /* Experimento: nome centralizado (pediu pra ver como fica) — `flex:1` dá ao
    nome o espaço que sobra entre o início da linha e o número, e o
    `text-align:center` centraliza o texto dentro dele. A régua pontilhada some
@@ -329,7 +329,7 @@ body {
    exatamente na borda do padding-box, então esse padding É a margem visível
    até a borda do mini-card. */
 .category-status { display: flex; justify-content: space-between; gap: var(--sp-med);
-  padding: var(--sp-tight) clamp(14px, 2vh, 28px) var(--sp-med); }
+  padding: var(--sp-tight) clamp(10px, 1.4vh, 20px) var(--sp-med); }
 .status-chip { display: flex; flex-direction: column; align-items: center;
   min-width: clamp(40px, 4vh, 74px); }
 .status-chip .label { font-size: var(--fs-chip-label); letter-spacing: .3px;
@@ -420,6 +420,26 @@ body {
 .tech-header { border-bottom: 2px solid var(--border); padding-bottom: .8em; }
 .tech-header .tech-name, .tech-header .tech-col { font-size: var(--fs-tech-head);
   text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; }
+
+/* Modo "todas as gavetas abertas": a tabela vira uma coluna flex e cada técnico
+   pega uma fatia igual da altura (min-height:0 + overflow:hidden = nunca
+   estoura, no pior caso corta). As fontes recalculam com `--ts` (definido pelo
+   JS conforme a quantidade de técnicos) e o `font-size` da tabela faz os
+   paddings em `em` acompanharem, em vez de ficarem presos aos 16px do body. */
+.tech-table.all-open {
+  --fs-tech-head: calc(clamp(10px, 1.1vh, 17px) * var(--ts, 1));
+  --fs-tech-name: calc(clamp(14px, 1.6vh, 24px) * var(--ts, 1));
+  --fs-tech-value: calc(clamp(14px, 1.6vh, 24px) * var(--ts, 1));
+  font-size: var(--fs-tech-name);
+  display: flex; flex-direction: column; }
+.tech-table.all-open .tech-header { flex: none; padding-bottom: .4em; }
+.tech-table.all-open #sec-technicians { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tech-table.all-open .tech-item { flex: 1 1 0; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center; }
+.tech-table.all-open .tech-row { padding: .35em .2em .15em; }
+.tech-table.all-open .tech-item.open .tech-detail,
+.tech-table.all-open .tech-item.open .tech-detail.skeleton { padding: .1em .4em .4em; }
+.tech-table.all-open .tech-item.open .tech-detail.empty { margin: 0 .2em .4em; padding: .25em; }
 
 /* ---------- Overlays de QR (login / configurar) ---------- */
 #auth, #cfg { position: fixed; inset: 0; z-index: 1000; display: none;

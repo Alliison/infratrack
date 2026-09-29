@@ -349,6 +349,7 @@ function carregarExibicao(cfg) {
   $("cf-rotativo").checked = !!cfg.rotativo;
   $("cf-sgi-rot").checked = !!cfg.sgi_in_rotation;
   $("cf-lock").value = cfg.screen_lock || "none";
+  $("cf-techs-open").checked = !!cfg.techs_expanded;
   $("cf-rotate").value = cfg.rotate_seconds || 15;
 }
 
@@ -458,6 +459,7 @@ function base() {
     rotativo: $("cf-rotativo").checked,
     sgi_in_rotation: $("cf-sgi-rot").checked,
     screen_lock: $("cf-lock").value,
+    techs_expanded: $("cf-techs-open").checked,
     rotate_seconds: parseInt($("cf-rotate").value, 10) || 15,
   };
 }

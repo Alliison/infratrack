@@ -84,8 +84,19 @@ async function boot() {
   secTimer = setInterval(refreshSecondary, refreshSeconds * 1000);
 }
 
+// Lê só o que pode mudar com a TV já no ar (a configuração salva no celular
+// vale no próximo ciclo, sem recarregar a página). Falha = mantém o que tinha.
+let techsExpanded = false;
+async function refreshDisplayConfig() {
+  try {
+    const cfg = await (await fetch("/api/config")).json();
+    techsExpanded = !!cfg.techs_expanded;
+  } catch (_) {}
+}
+
 async function refreshSecondary() {
   if (!token) return startAuth();
+  await refreshDisplayConfig();
   let body;
   try {
     const r = await fetch("/api/sgi/summary", { headers: { Authorization: `Bearer ${token}` } });
@@ -179,6 +190,12 @@ function renderTechnicians(rows, advance = false) {
   techRows = rows;
   const container = $("sec-technicians");
   container.innerHTML = "";
+  // Todas as gavetas abertas: a tabela reparte a altura entre os técnicos e
+  // `--ts` encolhe fontes/espaços conforme a quantidade (até 8 cabe em
+  // tamanho cheio; acima disso escala proporcionalmente, com piso).
+  const allOpen = techsExpanded && rows.length > 0;
+  container.parentElement.classList.toggle("all-open", allOpen);
+  container.parentElement.style.setProperty("--ts", String(Math.max(0.5, Math.min(1, 8 / Math.max(rows.length, 1)))));
   if (!rows.length) { openTech = null; techRotationIndex = -1; }
   else if (advance || !rows.some((t) => t.id === openTech)) {
     techRotationIndex = (techRotationIndex + 1) % rows.length;
@@ -186,7 +203,7 @@ function renderTechnicians(rows, advance = false) {
   }
   for (const t of rows) {
     const item = document.createElement("div");
-    item.className = "tech-item" + (t.id === openTech ? " open" : "");
+    item.className = "tech-item" + (allOpen || t.id === openTech ? " open" : "");
     const row = document.createElement("div");
     row.className = "tech-row";
 

@@ -50,6 +50,10 @@ class MosaicConfig(BaseModel):
     # "fulltrack" = só o mosaico (grids seguem girando), "sgi" = só o SGI
     # (cidades/técnicos seguem girando), "none" = alterna como configurado.
     screen_lock: Literal["none", "fulltrack", "sgi"] = "none"
+    # Tela do SGI com a gaveta da OS aberta em TODOS os técnicos ao mesmo tempo
+    # (em vez de um por vez, girando). O front encolhe fontes e espaços para
+    # caber todo mundo na altura da tela.
+    techs_expanded: bool = False
 
     # Escolhidos no modal de confirmação do celular. "auto" mantém o
     # comportamento antigo: grade deduzida da quantidade de carros e ligados
