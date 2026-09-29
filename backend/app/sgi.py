@@ -38,6 +38,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from . import totp
 from .config import settings
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ def today() -> date:
 # a descoberta (e como fallback se a spec estiver fora do ar).
 OPENAPI_PATH = "api/core/openapi.json"
 LOGIN_PATH = "api/core/v1/auth/login"
+VERIFY_2FA_PATH = "api/core/v1/auth/verify-2fa/{code}"
 ME_PATH = "api/core/v1/auth/me"
 SUMMARY_PATH = "api/core/v1/reports/service-orders/summary"
 TECHNICIANS_PATH = "api/core/v1/technicians/"
@@ -72,6 +74,8 @@ class SgiState:
     """Credencial viva do SGI. Nunca serializada, nunca gravada em disco."""
     username: str
     password: str                      # só em RAM, para o re-login automático
+    totp_secret: Optional[str] = None  # chave do 2FA (base32), se o usuário tiver
+    last_totp_step: int = -1           # janela de 30 s do último código usado
     token: str = ""
     expires_at: Optional[float] = None  # do claim `exp`; None = JWT sem validade legível
     obtained_at: float = field(default_factory=time.time)
@@ -81,6 +85,7 @@ class SgiState:
 
 
 _state: Optional[SgiState] = None
+MIN_RELOGIN_S = 30      # piso entre dois logins forçados (401 em rajada)
 
 
 def _base() -> str:
@@ -103,8 +108,25 @@ def _decode_exp(token: str) -> Optional[float]:
         return None
 
 
-async def _login(username: str, password: str) -> tuple[str, Optional[float]]:
-    """OAuth2 password grant. Devolve (token, expires_at) ou levanta RuntimeError."""
+class TwoFactorRequired(RuntimeError):
+    """Login pediu 2FA e não há chave configurada (ou o código foi recusado)."""
+
+
+_JSON_HEADERS = {"accept": "application/json"}
+_TEMP_TOKEN_KEYS = ("access_token", "token", "temp_token", "tempToken",
+                    "twoFactorToken", "mfa_token")
+
+
+async def _login(username: str, password: str, totp_secret: Optional[str] = None,
+                 state: Optional["SgiState"] = None) -> tuple[str, Optional[float]]:
+    """OAuth2 password grant (+ 2FA quando o usuário tem). Devolve (token, exp).
+
+    Sem 2FA: comportamento de sempre. Com 2FA o login devolve um objeto que não
+    é o `Token` final; aí, com a chave TOTP, calculamos o código e chamamos
+    `verify-2fa/{code}` com o token temporário. O formato exato do desafio não
+    está na spec do SGI — por isso o que veio (só os NOMES dos campos, nunca os
+    valores) vai para o log na primeira vez, para ajustar se preciso.
+    """
     data = {
         "grant_type": "password",
         "username": username,
@@ -113,47 +135,112 @@ async def _login(username: str, password: str) -> tuple[str, Optional[float]]:
         "client_id": "",
         "client_secret": "",
     }
-    headers = {
-        "accept": "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-    }
+    headers = {**_JSON_HEADERS, "Content-Type": "application/x-www-form-urlencoded"}
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             r = await client.post(f"{_base()}/{LOGIN_PATH}", data=data, headers=headers)
+            if r.status_code in (400, 401, 403):
+                raise RuntimeError("Usuário ou senha do SGI incorretos.")
+            if r.is_error:
+                raise RuntimeError(f"SGI recusou o login (HTTP {r.status_code}).")
+            body = r.json()
+            token = _first(body, _TEMP_TOKEN_KEYS)
+
+            # Token final = tem `user` (schema Token) ou o /auth/me aceita.
+            if token and (body.get("user") or await _me_ok(token) is True):
+                return token, _decode_exp(token)
+            if token and not totp_secret:
+                # Sem chave não há o que fazer além do comportamento antigo:
+                # devolve o que veio (usuário sem 2FA, resposta sem `user`).
+                if not _looks_like_challenge(body):
+                    return token, _decode_exp(token)
+
+            logger.info("SGI: login não devolveu token final; campos: %s", sorted(body))
+            if not totp_secret:
+                raise TwoFactorRequired(
+                    "Este usuário do SGI exige 2FA. Informe também a chave secreta do 2FA.")
+            if not token:
+                raise RuntimeError("SGI pediu 2FA mas não devolveu token temporário.")
+
+            code = await _fresh_code(totp_secret, state)
+            r2 = await client.post(
+                f"{_base()}/{VERIFY_2FA_PATH.format(code=code)}",
+                headers={**_JSON_HEADERS, "Authorization": f"Bearer {token}"})
+    except RuntimeError:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"SGI inacessível: {exc}") from exc
 
-    if r.status_code in (400, 401, 403):
-        raise RuntimeError("Usuário ou senha do SGI incorretos.")
-    if r.is_error:
-        raise RuntimeError(f"SGI recusou o login (HTTP {r.status_code}).")
+    if r2.status_code in (400, 401, 403, 422):
+        raise TwoFactorRequired(
+            "SGI recusou o código do 2FA. Confira a chave secreta e o relógio do servidor.")
+    if r2.is_error:
+        raise RuntimeError(f"SGI recusou o 2FA (HTTP {r2.status_code}).")
+    final = (r2.json().get("access_token") or "").strip()
+    if not final:
+        raise RuntimeError("SGI não devolveu 'access_token' após o 2FA.")
+    return final, _decode_exp(final)
 
-    token = (r.json().get("access_token") or "").strip()
-    if not token:
-        raise RuntimeError("SGI não devolveu 'access_token'.")
-    return token, _decode_exp(token)
+
+def _first(body: dict, keys: tuple[str, ...]) -> str:
+    for k in keys:
+        v = body.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
 
 
-async def _me_ok(token: str) -> bool:
-    """True se o `/auth/me` aceitar o token. Falha de rede conta como inválido."""
+def _looks_like_challenge(body: dict) -> bool:
+    blob = " ".join(str(k).lower() for k in body)
+    return any(w in blob for w in ("2fa", "mfa", "otp", "twofactor", "two_factor", "challenge"))
+
+
+async def _fresh_code(secret: str, state: Optional["SgiState"]) -> str:
+    """Código da janela atual, sem reusar o da janela do último login: o SGI
+    (como a maioria) recusa o mesmo código duas vezes. Se cair na mesma janela,
+    espera a próxima (no máximo ~30 s)."""
+    step = totp.step_of()
+    if state and step <= state.last_totp_step:
+        await asyncio.sleep(max(1.0, (state.last_totp_step + 1) * 30 - time.time() + 1))
+        step = totp.step_of()
+    if state:
+        state.last_totp_step = step
+    return totp.code(secret, step)
+
+
+async def _me_ok(token: str) -> Optional[bool]:
+    """True/False se o `/auth/me` aceitar/recusar o token; None se não deu para
+    saber (rede, 5xx). None NUNCA deve virar novo login: com 2FA, cada login é
+    um código a mais gasto por um soluço de rede."""
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(
                 f"{_base()}/{ME_PATH}",
-                headers={"accept": "application/json", "Authorization": f"Bearer {token}"},
+                headers={**_JSON_HEADERS, "Authorization": f"Bearer {token}"},
             )
-        return r.is_success
     except Exception as exc:  # noqa: BLE001
         logger.debug("SGI: falha ao validar token em /auth/me: %s", exc)
+        return None
+    if r.is_success:
+        return True
+    if r.status_code in (401, 403):
         return False
+    return None
 
 
-async def enable(username: str, password: str) -> dict:
-    """Habilita o SGI: faz login e guarda a credencial em RAM."""
+async def enable(username: str, password: str, totp_secret: Optional[str] = None) -> dict:
+    """Habilita o SGI: faz login (com 2FA, se houver chave) e guarda a credencial."""
     global _state
-    token, exp = await _login(username, password)
-    _state = SgiState(username=username, password=password, token=token, expires_at=exp,
-                      last_check_at=time.time())
+    secret = None
+    if totp_secret and totp_secret.strip():
+        try:
+            secret = totp.clean_secret(totp_secret)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError("Chave do 2FA inválida (esperado o texto base32 do QR).") from exc
+    st = SgiState(username=username, password=password, totp_secret=secret)
+    token, exp = await _login(username, password, secret, st)
+    st.token, st.expires_at, st.obtained_at, st.last_check_at = token, exp, time.time(), time.time()
+    _state = st
     logger.info("SGI habilitado para %s (exp %s)", username,
                 "ausente" if exp is None else f"em {(exp - time.time()) / 3600:.1f}h")
     # Confere o contrato na spec assim que há token: melhor descobrir agora que na TV.
@@ -181,6 +268,7 @@ def status() -> dict:
         "proactive_refresh": s.expires_at is not None,
         "last_check_in": None if s.last_check_at is None else int(time.time() - s.last_check_at),
         "last_error": s.last_error,
+        "two_factor": bool(s.totp_secret),
     }
 
 
@@ -200,15 +288,36 @@ async def valid_token(force: bool = False) -> str:
         raise RuntimeError("SGI não habilitado.")
 
     async with s.lock:
-        precisa = force
-        if not precisa and s.expires_at is not None:
-            # Proativo: renova antes de morrer, sem esperar o primeiro 401.
-            precisa = (s.expires_at - time.time()) <= settings.sgi_refresh_margin
-        if not precisa:
-            precisa = not await _me_ok(s.token)
+        now = time.time()
+        # Login só quando REALMENTE preciso — nunca "a cada request" (com 2FA cada
+        # login gasta um código e o SGI recusa repetido na mesma janela de 30 s):
+        #  - exp conhecido (JWT): só na margem final de vida, sem chamar nada;
+        #  - exp desconhecido: confere no /auth/me no máximo a cada
+        #    `sgi_health_every` e só relogina se ele RECUSAR (401/403), nunca
+        #    por falha de rede;
+        #  - force (401 num endpoint de dados): relogina, mas não se o token foi
+        #    obtido há menos de MIN_RELOGIN_S (evita rajada de logins).
+        if force:
+            precisa = now - s.obtained_at > MIN_RELOGIN_S
+        elif s.expires_at is not None:
+            precisa = (s.expires_at - now) <= settings.sgi_refresh_margin
+        elif s.last_check_at is None or now - s.last_check_at >= settings.sgi_health_every:
+            precisa = (await _me_ok(s.token)) is False
+            if not precisa:
+                s.last_check_at = now
+        else:
+            precisa = False
 
         if precisa:
-            token, exp = await _login(s.username, s.password)
+            try:
+                token, exp = await _login(s.username, s.password, s.totp_secret, s)
+            except RuntimeError:
+                # Renovação antecipada falhou mas o token ainda vale: segue com
+                # ele e tenta de novo no próximo ciclo, em vez de derrubar a TV.
+                if not force and (s.expires_at is None or s.expires_at > now):
+                    logger.warning("SGI: renovação falhou; mantendo o token atual.")
+                    return s.token
+                raise
             s.token, s.expires_at, s.obtained_at = token, exp, time.time()
             logger.info("SGI: token renovado.")
         s.last_check_at = time.time()

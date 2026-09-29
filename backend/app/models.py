@@ -79,3 +79,4 @@ class SgiEnableRequest(BaseModel):
     """Credencial do SGI vinda da tela de configuração. Não é persistida."""
     username: str
     password: str
+    totp_secret: Optional[str] = None   # chave base32 do 2FA (opcional)

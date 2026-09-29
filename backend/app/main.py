@@ -249,7 +249,7 @@ async def sgi_enable(body: SgiEnableRequest, session: AppSession = Depends(curre
     disco é apenas o flag `sgi_enabled`.
     """
     try:
-        st = await sgi.enable(body.username.strip(), body.password)
+        st = await sgi.enable(body.username.strip(), body.password, body.totp_secret)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     cfg = storage.load_config()

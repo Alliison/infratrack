@@ -39,7 +39,8 @@ def _snapshot() -> dict:
                      "login_user": a.login_user, "password": a.password})
     st = sgi._state
     return {"app_sessions": apps,
-            "sgi": {"username": st.username, "password": st.password} if st else None}
+            "sgi": ({"username": st.username, "password": st.password,
+             "totp_secret": st.totp_secret} if st else None)}
 
 
 _last = ""
@@ -82,7 +83,7 @@ async def restore() -> None:
     s = data.get("sgi")
     if s and not sgi.is_enabled():
         try:
-            await sgi.enable(s["username"], s["password"])
+            await sgi.enable(s["username"], s["password"], s.get("totp_secret"))
             logger.info("SGI reconectado com a credencial salva.")
         except Exception as exc:  # noqa: BLE001
             logger.warning("SGI: reconexao com a credencial salva falhou: %s", exc)

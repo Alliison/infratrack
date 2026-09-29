@@ -71,6 +71,12 @@
           <label for="sgi-pass">Senha do SGI</label>
           <input id="sgi-pass" type="password" autocomplete="current-password">
         </div>
+        <div class="field">
+          <label for="sgi-totp">Chave do 2FA (só se o usuário tiver 2FA)</label>
+          <input id="sgi-totp" autocapitalize="characters" autocorrect="off" autocomplete="off"
+                 placeholder="JBSW Y3DP EHPK 3PXP">
+          <p class="hint">O texto que aparece junto ao QR ao cadastrar o 2FA no SGI (ou o link otpauth://). O painel gera os códigos sozinho. Fica salva no servidor, junto com a senha.</p>
+        </div>
         <button class="primary" id="sgi-connect" type="button">Conectar ao SGI</button>
         <button class="secondary" id="sgi-cancel" type="button">Cancelar</button>
       </div>

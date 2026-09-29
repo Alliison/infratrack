@@ -122,7 +122,7 @@ async function initSgi(cfg) {
   $("sgi-cancel").addEventListener("click", () => {
     $("sgi-form").hidden = true;
     $("sgi-enable").hidden = false;
-    $("sgi-pass").value = "";
+    $("sgi-pass").value = ""; $("sgi-totp").value = "";
     sgiMsg("");
   });
 
@@ -138,12 +138,13 @@ async function initSgi(cfg) {
       const r = await fetch("/api/sgi/enable", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, totp_secret: $("sgi-totp").value.trim() || null }),
       });
       const body = await r.json();
       if (!r.ok) throw new Error(body.detail || "falha ao conectar");
       // A senha sai da tela assim que o backend a aceita: ela já vive na RAM dele.
       $("sgi-pass").value = "";
+      $("sgi-totp").value = "";
       mostrarSgi(body, true);
       sgiMsg("SGI conectado.", "msg ok");
       carregarEquipes();
