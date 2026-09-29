@@ -351,17 +351,17 @@ body {
   position: fixed; top: 44px; left: 40vw; right: 0; bottom: 0;
   background: var(--bg); padding: 1.6vh;
 
-  --fs-tech-title: clamp(15px, 1.7vh, 26px);
-  --fs-tech-head: clamp(12px, 1.3vh, 20px);
-  --fs-tech-name: clamp(16px, 1.9vh, 28px);
-  --fs-tech-value: clamp(16px, 1.9vh, 28px);
+  --fs-tech-title: clamp(13px, 1.5vh, 22px);
+  --fs-tech-head: clamp(10px, 1.1vh, 17px);
+  --fs-tech-name: clamp(14px, 1.6vh, 24px);
+  --fs-tech-value: clamp(14px, 1.6vh, 24px);
 }
 #tertiary .card { height: 100%; padding: var(--sp-card, 1.3vh) var(--sp-card-x, 1.6vh);
   display: flex; flex-direction: column; }
 #tertiary .card h2 { font-size: var(--fs-tech-title); margin: 0; text-align: center;
   text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; }
 
-.tech-table { margin-top: 1vh; overflow-y: hidden; flex: 1; min-height: 0; }
+.tech-table { margin-top: .3vh; overflow-y: hidden; flex: 1; min-height: 0; }
 .tech-row { display: grid; grid-template-columns: 2fr 1fr; align-items: center;
   gap: .6em; padding: 1.1em .2em; border-bottom: 1px solid var(--border); }
 .tech-row:last-child { border-bottom: none; }
