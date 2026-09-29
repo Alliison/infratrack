@@ -27,18 +27,32 @@
 
   <div id="mosaic"></div>
 
+  <!-- Tela do SGI como página do rodízio (ver render() em mosaic.js): cobre a
+       tela toda, com a barra dela própria. Só recebe src quando aparece. -->
+  <iframe id="sgi-frame" title="SGI"></iframe>
+
   <div id="auth">
     <img class="logo-lg" src="/assets/img/impacto-logo.svg" alt="Impacto"
          onerror="this.onerror=null;this.src='/assets/img/impacto-mark.svg'">
-    <p>Escaneie o QR-code com o celular para liberar o painel com sua conta FullTrack.</p>
+    <p>Escaneie o QR-code com o celular para liberar o painel com sua conta
+       FullTrack — ou copie o link abaixo, se o celular não estiver nesta rede.</p>
     <div class="qrbox"><img id="qrimg" alt="QR-code de login"></div>
+    <div class="urlrow">
+      <input id="authurl" class="urlfield" readonly aria-label="Link de login">
+      <button id="authcopy" class="copybtn" type="button">Copiar</button>
+    </div>
     <p class="hint" id="authhint">Aguardando leitura…</p>
   </div>
 
   <div id="cfg">
     <h1>Configurar mosaico</h1>
-    <p>Escaneie o QR-code para escolher os veículos e preferências pelo celular.</p>
+    <p>Escaneie o QR-code para escolher os veículos e preferências pelo celular
+       — ou copie o link abaixo.</p>
     <div class="qrbox"><img id="cfgqr" alt="QR-code de configuração"></div>
+    <div class="urlrow">
+      <input id="cfgurl" class="urlfield" readonly aria-label="Link de configuração">
+      <button id="cfgcopy" class="copybtn" type="button">Copiar</button>
+    </div>
     <p class="hint">As mudanças salvas aparecem aqui automaticamente.</p>
     <a class="btn" href="#" id="cfgclose">Fechar</a>
   </div>

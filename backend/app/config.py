@@ -17,8 +17,31 @@ class Settings(BaseSettings):
     qr_session_ttl: int = 300          # validade do QR-code
     app_token_ttl: int = 0             # sessão da TV: 0 = nunca expira
 
+    # --- SGI (origem da tela secundária) ---
+    # Sem usuário/senha aqui de propósito: quem habilita é o usuário, na tela de
+    # configuração, e a credencial fica só em RAM (ver sgi.py).
+    sgi_base_url: str = "https://sgi.impactotelecom.com"
+    # ⚠️ SÓ PARA DESENVOLVIMENTO. Em produção ficam VAZIOS: lá quem habilita é o
+    # usuário, pela tela, e a credencial vive só em RAM. Aqui existem porque o
+    # `--reload` do uvicorn reinicia o processo a cada edição e derrubaria o SGI
+    # a cada linha mexida — inviabilizando testar. Preenchidos, o app reconecta
+    # sozinho no startup. O `.env.dev` é gitignored.
+    sgi_username: str = ""
+    sgi_password: str = ""
+    # Margem para renovar o token ANTES de ele expirar (segundos). 3600 = renova
+    # na última hora de vida, quando o JWT traz `exp`.
+    sgi_refresh_margin: int = 3600
+    # Intervalo do health check do token (segundos).
+    sgi_health_every: int = 1800
+    # Filtros da consulta. Ficam aqui (e não no código) porque são política de
+    # negócio, não contrato: mudar o escopo do painel não deveria exigir deploy.
+    # Na spec do SGI `type` é array — por isso lista, não string.
+    sgi_types: list[str] = ["infra"]
+    sgi_date_field: str = "scheduled_date"
+
     # Persistência do mosaico salvo
     config_path: str = "mosaic_config.json"
+
 
     @property
     def emp_login_url(self) -> str:

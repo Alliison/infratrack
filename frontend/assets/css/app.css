@@ -10,6 +10,12 @@
   --navy: #0e2a5e;        /* azul Impacto profundo */
   --brand: #17cf74;       /* verde Impacto */
   --danger: #ef4444;
+
+  /* Altura da fileira de cima da tela secundária (#secondary: "Conclusão de
+     hoje" + os 3 indicadores solo). Fica no :root pra não duplicar o clamp()
+     se algo mais um dia precisar do mesmo valor (já aconteceu, com
+     #tertiary, e os dois desalinharam quando só um foi atualizado). */
+  --tv-top-row-h: clamp(120px, 14vh, 205px);
 }
 
 /* Marca Impacto */
@@ -28,6 +34,12 @@ body {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   overflow: hidden;
 }
+
+/* Tela do SGI embutida no rodízio do mosaico: cobre tudo (inclusive a barra do
+   mosaico, a do SGI já tem a dela) e fica abaixo dos overlays de QR (z 1000). */
+#sgi-frame { position: fixed; inset: 0; width: 100%; height: 100%; border: 0;
+  z-index: 600; display: none; background: var(--bg); }
+#sgi-frame.on { display: block; }
 
 /* ---------- Barra de status (TV) ---------- */
 #topbar {
@@ -87,6 +99,325 @@ body {
 .tile.offline .map .leaflet-tile-pane { filter: grayscale(1) brightness(.42); }
 .tile.offline .label { opacity: .7; }
 
+/* ---------- Tela secundária (SGI) ---------- */
+/* Página própria (secondary.html) — não compartilha DOM com o #mosaic da
+   FullTrack. Ocupa 40% da LARGURA DA TELA (não da metade esquerda — a área
+   reservada pra ela é maior que o conteúdo, de propósito, pra não grudar no
+   meio nem espremer os cards no canto), grudado na esquerda. O resto (60%)
+   fica livre, sem nada nosso nele — nem a metade inteira é nossa, só essa
+   fatia. A fileira de cima e o "Resumo das ordens" dividem essa mesma largura
+   (são linhas do mesmo grid), então os dois sempre têm o mesmo tamanho total.
+   "Responsivo" aqui não é a acepção de site (não existem tamanhos de tela
+   variados pra suportar: é uma TV, uma resolução por vez) — é só não cravar
+   números em px que quebrariam se a TV não for exatamente a que eu imaginei.
+   Por isso as fontes/paddings usam `vh` (altura da viewport): a LARGURA do
+   bloco é fixa em 40vw (decisão de layout, não escala), mas a altura da TV
+   continua sendo a métrica estável pra escalar texto e espaçamento. */
+#secondary {
+  position: fixed; top: 44px; left: 0; width: 40vw; bottom: 0;
+  background: var(--bg);
+  display: grid;
+  /* 21vh de preferência (não mais 14,5): "Conclusão de hoje" ganhou uma
+     linha a mais (os chips de concluídas/improdutivas/fechadas, embaixo do
+     número — ver .card.completion .stats-compact) além do título de 2
+     linhas ("Em andamento" não cabe numa linha só nas colunas estreitas).
+     Medido de novo em headless Chrome em várias resoluções depois de cada
+     mudança de conteúdo — é fácil essa conta ficar desatualizada se um card
+     ganhar mais uma linha no futuro sem reconferir aqui. Valor em
+     `--tv-top-row-h` (:root), compartilhado com #tertiary. */
+  grid-template-rows: var(--tv-top-row-h) 1fr;
+  gap: 1.6vh;
+  padding: 1.6vh;
+
+  --fs-title: clamp(15px, 1.7vh, 26px);
+  --fs-big: clamp(42px, 5.6vh, 96px);
+  --fs-big-half: clamp(46px, 6.1vh, 104px);
+  --fs-cap: clamp(13px, 1.5vh, 22px);
+  --fs-stat-label: clamp(11px, 1.3vh, 20px);
+  --fs-stat-value: clamp(12px, 1.5vh, 23px);
+  --fs-msg: clamp(15px, 1.7vh, 24px);
+  --fs-city-name: clamp(17px, 2vh, 28px);
+  --fs-city-count: clamp(18px, 2.2vh, 30px);
+  --fs-cat-name: clamp(17px, 2vh, 28px);
+  --fs-cat-count: clamp(15px, 1.7vh, 24px);
+  --fs-chip-label: clamp(10px, 1.1vh, 16px);
+  --fs-chip-value: clamp(16px, 1.9vh, 26px);
+  --sp-card: clamp(10px, 1.3vh, 22px);      /* padding vertical dos cards */
+  --sp-card-x: clamp(12px, 1.6vh, 24px);    /* padding horizontal dos cards */
+  /* Estas três existem porque `em` só escala com a tela em cima de um
+     elemento que TEM font-size próprio (var(--fs-*)) — um `<div>` só de
+     layout (.row, .city-row, .cities…) não tem texto nenhum, herda o
+     font-size do ancestral mais próximo que definiu um, e se nenhum definiu,
+     cai no padrão do navegador (16px), fixo, por mais vh que a gente escreva
+     do lado. Foi assim que boa parte do espaçamento ficou "responsivo só de
+     mentira" — só as fontes escalavam, o respiro em volta delas não. */
+  --sp-gap: clamp(6px, .9vh, 18px);         /* título -> número, igual nos dois estilos de card */
+  --sp-tight: clamp(4px, .5vh, 10px);       /* linhas de cidade/categoria/status */
+  --sp-med: clamp(8px, 1vh, 18px);          /* acima da lista de cidades */
+}
+
+/* Fileira de cima: "Conclusão de hoje" ocupa o dobro da largura de cada
+   indicador solo (2fr : 1fr : 1fr : 1fr) — mesma proporção do mockup original
+   (366,17 : 183,09 ≈ 2:1). (Cheguei a aumentar pra 3fr numa tentativa anterior
+   de caber concluídas/improdutivas/fechadas ao LADO do número grande — não
+   coube em nenhuma largura testada. Resolvido de outro jeito: ver
+   .card.completion .stats-compact, agora embaixo do número, não do lado.) */
+/* "Em andamento" (3ª coluna) ganhou mais espaço que "À fazer"/"Expiradas"
+   (0,85fr) pra caber numa linha só — é a palavra mais longa das 3. Tirei essa
+   largura DELES, não de "Conclusão de hoje" (que continua em 2fr): testei
+   tirar dela e a linha única de concluídas/improdutivas/fechadas (ver
+   .stats-compact) parou de caber numa linha só — ela precisa da largura
+   inteira que já tinha. */
+.top-row { display: grid; grid-template-columns: 2.2fr .95fr 1.2fr .95fr; gap: 1.2vh; }
+
+.card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.3); overflow: hidden;
+}
+/* ⚠️ NÃO REMOVER. `.card` também é usado pelas páginas de celular
+   (login/config — ver "Páginas de celular" mais abaixo neste arquivo), que
+   têm seu PRÓPRIO `.card { max-width:420px; margin:40px 16px; ... }`. Mesmo
+   seletor, e nossos cards de TV (.completion/.half/.summary) não tinham
+   `max-width`/`margin` próprios até aqui — então herdavam os dali por
+   tabela (nenhuma outra regra competia pra essas duas propriedades
+   especificamente). Já corrigi isso 2 vezes e as duas vezes a correção
+   sumiu numa reescrita seguinte porque estava espalhada pelos 3 cards; por
+   isso virou UMA regra só, com especificidade bem mais alta
+   (`#secondary .card`/`#tertiary .card`, id+classe) que qualquer coisa nas
+   páginas de celular — não depende de eu lembrar de repetir em cada
+   subclasse de novo. Sintomas quando volta a quebrar: cards presos em
+   420px de largura (max-width voltou) ou números escapando do clipe do
+   card (margin voltou). `#tertiary` é a área da direita (resumo por
+   técnico) — mesmo problema, mesma correção. */
+#secondary .card, #tertiary .card { max-width: none; margin: 0; }
+/* Cards são de TV, vistos de longe — texto grande e fluido (clamp, não px
+   fixo) é o objetivo: cresce com a tela, mas tem piso e teto pra não sumir
+   numa TV pequena nem virar cartaz numa 4K. line-height:1 recupera o espaço
+   vertical que o padrão do navegador (~1.15) comeria. */
+/* min-height reserva o espaço de 2 linhas SEMPRE, mesmo quando o título cabe
+   numa linha só ("Conclusão de hoje", coluna mais larga): é isso que garante
+   a mesma altura de título em todo card, então o número sempre começa na
+   mesma altura — e é isso que evita o corte de quem realmente quebra em 2
+   linhas ("Em andamento", nas colunas estreitas). */
+.card h2 { margin: 0; font-size: var(--fs-title); line-height: 1.15; letter-spacing: .3px;
+  text-transform: uppercase; color: var(--muted); font-weight: 700; text-align: center;
+  min-height: 2.4em; display: flex; align-items: center; justify-content: center; }
+/* Fileira de cima: títulos numa linha só (não reserva mais 2 linhas). */
+.top-row .card h2 { white-space: nowrap; min-height: 0; flex: none; }
+.card .msg { font-size: var(--fs-msg); }
+.card .big-compact { font-size: var(--fs-big); font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--brand); white-space: nowrap;
+  text-align: center; }
+.card .big-compact .sep { color: var(--muted); font-weight: 300; margin: 0 .1em; }
+.card .big-compact .cap { display: block; font-size: var(--fs-cap); line-height: 1.2;
+  font-weight: 400; color: var(--muted); margin-top: .15em; }
+
+/* Card "Conclusão de hoje": primeira coluna da fileira de cima.
+   (max-width/margin vêm de `#secondary .card`, acima — não repetir aqui.) */
+.card.completion { padding: var(--sp-card) var(--sp-card-x);
+  display: flex; flex-direction: column; align-items: center; }
+/* Mesmo `--sp-gap` do número do card "À fazer" (ver .card.half .big-compact):
+   é o que faz os indicadores caírem na mesma altura, em vez de cada card
+   distribuir o espaço sobrando (título/número/rodapé) do seu próprio jeito.
+   Precisava ser a MESMA variável, não só o mesmo número em `em`. */
+.card.completion .big-compact { margin-top: var(--sp-gap); }
+/* concluídas/improdutivas/fechadas embaixo do número, em LINHA ÚNICA, texto
+   corrido. Já passou por 3 desenhos antes disso: ao lado do número (não
+   sobrava largura pro rótulo), 3 chips lado a lado (idem — "improdutivas"
+   sozinho já não cabia) e lista vertical (cabia, mas ocupava altura demais e
+   empurrava "Resumo das ordens" pra baixo). Este é mais compacto que os três:
+   uma linha só, sem grid nem chip, só o "·" separando. */
+.card.completion .stats-compact { display: flex; align-items: baseline; justify-content: center;
+  flex-wrap: nowrap; white-space: nowrap; column-gap: .15em; font-size: var(--fs-stat-label); line-height: 1.2;
+  color: var(--muted); margin-top: var(--sp-tight); width: 100%; }
+.card.completion .stats-compact .dot { color: var(--border); }
+.card.completion .stats-compact b { color: var(--text); font-size: var(--fs-stat-value);
+  font-weight: 700; font-variant-numeric: tabular-nums; }
+.card.completion .msg { margin-top: .3em; }
+
+/* Cards de indicador solo (só título + 1 número): "À fazer", "Em andamento" e
+   "Expiradas" são o mesmo desenho, cada um sua própria coluna do grid (1fr) —
+   por isso dividem esta classe em vez de repetir a regra em cada um. */
+.card.half {
+  padding: var(--sp-card) var(--sp-card-x); display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-start;
+}
+/* Título no topo, alinhado com o "Conclusão de hoje" (mesmo padding). Mesmo
+   margin-top do `.row` daquele card: é isso que alinha todos os indicadores
+   na mesma altura, não centralização no espaço sobrando (que varia com o que
+   cada card tem abaixo do número). */
+.card.half .big-compact { font-size: var(--fs-big-half); margin-top: var(--sp-gap); }
+
+/* "Resumo das ordens": segunda linha do grid, ocupa a largura toda sozinho e
+   preenche o que sobra da tela (a linha do grid é `1fr`, não altura fixa). */
+.card.summary { padding: var(--sp-card) var(--sp-card-x);
+  display: flex; flex-direction: column; }
+
+/* Lista de cidades, uma aberta por vez (acordeão automático). SEM scroll de
+   propósito — numa TV ninguém rola nada, então `overflow:auto` só esconderia
+   o problema atrás de uma barra que não serve pra nada ali. `min-height:0` no
+   flex item é o que deixa o `overflow:hidden` respeitar a altura do card
+   (senão a lista empurraria o card pra baixo do que cabe na tela). Se o
+   número de cidades não couber mesmo compactando, precisa de paginação
+   (como o rodízio do mosaico) — ainda não fiz isso, avisar se for o caso. */
+.card.summary .cities { margin-top: var(--sp-med); overflow-y: hidden; flex: 1; min-height: 0; }
+.city { border-bottom: 1px solid var(--border); }
+.city:last-child { border-bottom: none; }
+.city-row { display: flex; align-items: baseline; gap: var(--sp-tight); padding: var(--sp-tight) 2px; }
+.city-row .name { font-weight: 700; font-size: var(--fs-city-name); color: var(--text);
+  white-space: nowrap; }
+/* O "Atibaia .... 12": uma régua pontilhada que estica pra preencher o vão
+   entre o nome e o número, como sumário de índice. */
+.city-row .leader { flex: 1; border-bottom: 2px dotted var(--border); margin-bottom: 4px; }
+.city-row .count { font-weight: 800; font-size: var(--fs-city-count); color: var(--brand);
+  font-variant-numeric: tabular-nums; }
+/* Fechada por padrão. Nada de animação de altura aqui: o número de categorias
+   varia por cidade, e uma transição de `max-height` fixa fica errada (rápida
+   demais pra pouco conteúdo, devagar demais pra muito). */
+.city-detail { display: none; padding: 2px 2px var(--sp-med); }
+/* Grade de 2 colunas — a partir da 2ª categoria elas ficam lado a lado, não
+   empilhadas. Com 1 categoria só, ela ocupa a 1ª célula e a 2ª fica vazia
+   (não precisa de regra especial pra isso, o grid já se comporta assim). */
+.city.open .city-detail { display: grid; grid-template-columns: 1fr 1fr;
+  gap: var(--sp-tight) var(--sp-med); }
+.city-detail .loading { color: var(--muted); font-size: var(--fs-cat-name); grid-column: 1 / -1; }
+/* Cada categoria é um mini-card — borda sutil só pra separar uma da outra,
+   nada do peso visual de `.card` (sem sombra, sem fundo diferente). */
+.category { border: 1px solid var(--border); border-radius: 8px; }
+/* Detalhamento por categoria dentro da cidade aberta ("Rompimento Massivo
+   .... 2") — mesmo desenho do "Atibaia .... 12", só menor. Sem recuo à
+   esquerda: antes marcava o nível de aninhamento com `--sp-card-x`, mas
+   agora quem separa visualmente é a borda do mini-card, o recuo ficava
+   redundante e desperdiçava espaço que aqui é mais apertado (metade da
+   largura, 2 colunas). */
+.category-row { display: flex; align-items: baseline; gap: var(--sp-tight);
+  padding: var(--sp-med) clamp(14px, 2vh, 28px) var(--sp-tight); }
+/* Experimento: nome centralizado (pediu pra ver como fica) — `flex:1` dá ao
+   nome o espaço que sobra entre o início da linha e o número, e o
+   `text-align:center` centraliza o texto dentro dele. A régua pontilhada some
+   junto: apontar um leader pra um nome centralizado não faz sentido visual. */
+/* Destaque: era do mesmo peso/cor do resto (--muted, sem negrito) — é o
+   título do mini-card, então agora fica maior que o próprio número
+   (--fs-cat-name subiu, ver :root) e com o mesmo tratamento do nome da
+   cidade (negrito + --text), não mais discreto feito uma legenda. */
+.category-row .name { flex: 1; text-align: center; font-size: var(--fs-cat-name);
+  font-weight: 600; color: var(--text); white-space: nowrap; text-transform: uppercase; }
+.category-row .leader { display: none; }
+/* Mesmo tamanho do título (--fs-cat-name, não --fs-cat-count) pra alinhar
+   visualmente com ele, mas SEM negrito — é o nome que tem que chamar mais
+   atenção, o número só acompanha do lado. */
+.category-row .count { font-size: var(--fs-cat-name); font-weight: 600; color: var(--text);
+  font-variant-numeric: tabular-nums; }
+
+/* Status dentro da categoria (À fazer / Em andamento / Expiradas) — mesmas
+   regras de cálculo dos cards do título, mas SEM régua pontilhada: são só 3
+   valores lado a lado, e a linha de ligação mais atrapalharia que ajudaria
+   a identificar rápido de longe. Rótulo em cima, número embaixo — mesma
+   lógica visual do `.card h2`/`.big-compact`, só reduzida pro nível aninhado.
+   Gap em `--sp-med` (não `--sp-tight`): os 3 ficavam grudados demais pra ler
+   de longe — o mini-card é mais estreito agora (2 colunas), mas separação
+   legível pesa mais aqui do que evitar quebra de linha em telas pequenas.
+   `space-between` (não `center`): "À fazer" cola na borda esquerda,
+   "Expiradas" na direita, "Em andamento" sobra exatamente no meio — o padding
+   horizontal (`--sp-tight`) é a margem que impede os dois de encostar na
+   borda do mini-card. O texto DENTRO de cada chip continua centralizado
+   (isso é `.status-chip { align-items:center }`, não mexi nisso) — só a
+   posição do chip inteiro na linha mudou. */
+/* Padding horizontal maior que `--sp-med` de propósito (valor próprio, não a
+   variável compartilhada — não quero puxar outros espaçamentos que também
+   usam `--sp-med` junto): com `space-between`, "À fazer"/"Expiradas" ficam
+   exatamente na borda do padding-box, então esse padding É a margem visível
+   até a borda do mini-card. */
+.category-status { display: flex; justify-content: space-between; gap: var(--sp-med);
+  padding: var(--sp-tight) clamp(14px, 2vh, 28px) var(--sp-med); }
+.status-chip { display: flex; flex-direction: column; align-items: center;
+  min-width: clamp(40px, 4vh, 74px); }
+.status-chip .label { font-size: var(--fs-chip-label); letter-spacing: .3px;
+  text-transform: uppercase; color: var(--muted); font-weight: 700; line-height: 1; }
+.status-chip .value { font-size: var(--fs-chip-value); font-weight: 400; color: var(--text);
+  font-variant-numeric: tabular-nums; line-height: 1; margin-top: .2em; }
+
+/* ---------- Área da direita (resumo por técnico) — 1º rascunho ---------- */
+/* Ocupa os 60% da tela que sobraram de `#secondary` (que é 40vw, grudado na
+   esquerda) — mesmo espírito: nada de px fixo, fontes/paddings em vh. Ainda
+   em desenho: o card único com uma tabela é o ponto de partida, não decisão
+   final de layout.
+   Altura CHEIA (top:44px até o rodapé) — cheguei a alinhar só com "Resumo das
+   ordens" (reservando uma linha vazia em cima, espelhando a fileira de cima
+   da esquerda), mas não é o que se quer aqui: sem nada equivalente à fileira
+   de cima do lado direito ainda, reservar aquele espaço só desperdiçava
+   altura. */
+#tertiary {
+  position: fixed; top: 44px; left: 40vw; right: 0; bottom: 0;
+  background: var(--bg); padding: 1.6vh;
+
+  --fs-tech-title: clamp(15px, 1.7vh, 26px);
+  --fs-tech-head: clamp(12px, 1.3vh, 20px);
+  --fs-tech-name: clamp(16px, 1.9vh, 28px);
+  --fs-tech-value: clamp(16px, 1.9vh, 28px);
+}
+#tertiary .card { height: 100%; padding: var(--sp-card, 1.3vh) var(--sp-card-x, 1.6vh);
+  display: flex; flex-direction: column; }
+#tertiary .card h2 { font-size: var(--fs-tech-title); margin: 0; text-align: center;
+  text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; }
+
+.tech-table { margin-top: 1vh; overflow-y: hidden; flex: 1; min-height: 0; }
+.tech-row { display: grid; grid-template-columns: 2fr 1fr; align-items: center;
+  gap: .6em; padding: 1.1em .2em; border-bottom: 1px solid var(--border); }
+.tech-row:last-child { border-bottom: none; }
+.tech-who { min-width: 0; display: flex; flex-direction: column; gap: .15em; }
+.tech-item { border-bottom: 1px solid var(--border); }
+.tech-item:last-child { border-bottom: none; }
+.tech-item .tech-row { border-bottom: none; }
+/* Fechado por padrão; sem animação de altura (o conteúdo varia). */
+.tech-detail { display: none; }
+.tech-item.open .tech-detail, .tech-item.open .tech-detail.skeleton { display: grid; grid-template-columns: .8fr 2.6fr 1fr .8fr;
+  gap: .6em; padding: .2em .4em 1em; }
+/* Esqueleto enquanto a ficha do técnico não chegou: mesma grade do detalhe
+   pronto, só barras neutras pulsando — nada que pareça informação. */
+.tech-detail.skeleton { pointer-events: none; }
+.sk { display: block; border-radius: 6px; background: var(--border);
+  animation: sk-pulse 1.2s ease-in-out infinite; }
+.sk-lbl { height: var(--fs-tech-head); width: 55%; margin-bottom: .35em; }
+.sk-val { height: var(--fs-tech-value); width: 90%; }
+.tech-avatar.sk-avatar { color: var(--border); animation: sk-pulse 1.2s ease-in-out infinite; }
+@keyframes sk-pulse { 0%, 100% { opacity: .35; } 50% { opacity: .8; } }
+.tech-detail .val.not-started { color: var(--muted); font-weight: 700; }
+.tech-detail .val.sla-ok { color: #22c55e; }
+.tech-detail .val.sla-warn { color: #fbbf24; }
+.tech-detail .val.sla-over { color: #f87171; }
+.tech-detail .since { font-size: var(--fs-tech-head); color: var(--muted); }
+.tech-detail-cell { display: flex; flex-direction: column; min-width: 0; }
+/* Status e Iniciada centralizados (título e valor); OS e Endereço seguem à esquerda. */
+.tech-detail-cell:nth-child(n+3) { text-align: center; }
+.tech-detail .lbl { font-size: var(--fs-tech-head); text-transform: uppercase;
+  letter-spacing: .3px; color: var(--muted); font-weight: 700; }
+.tech-detail .val { font-size: var(--fs-tech-value); color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tech-item.open .tech-detail.empty { display: flex; align-items: center; gap: .5em;
+  justify-content: center; font-size: var(--fs-tech-value); font-weight: 700;
+  color: #fbbf24; background: rgba(251,191,36,.08); border: 1px dashed rgba(251,191,36,.5);
+  border-radius: 8px; padding: .5em; margin: 0 .2em 1em; }
+.tech-ident { display: flex; align-items: center; gap: .6em; min-width: 0; }
+.tech-avatar { font-size: calc(var(--fs-tech-name) * 1.6); flex: none; }
+.tech-avatar.on { color: #22c55e; }
+.tech-avatar.off { color: var(--muted); opacity: .6; }
+.badge { display: inline-block; padding: .1em .6em; border-radius: 999px; font-weight: 700;
+  font-size: var(--fs-tech-head); text-transform: uppercase; letter-spacing: .3px;
+  border: 1px solid var(--border); color: var(--muted); }
+.badge.ok { color: #22c55e; border-color: #22c55e; }
+.badge.off { color: #f87171; border-color: rgba(248,113,113,.45); background: rgba(248,113,113,.08); }
+.tech-row .tech-sub { font-size: var(--fs-tech-head); color: var(--muted); }
+.tech-row .tech-name { text-align: left; font-weight: 700; color: var(--text);
+  font-size: var(--fs-tech-name); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tech-row .tech-col { text-align: center; font-variant-numeric: tabular-nums;
+  font-size: var(--fs-tech-value); color: var(--text); }
+/* Cabeçalho: rótulos pequenos e discretos, mesma grade de colunas da linha
+   de dados — é o que mantém tudo alinhado embaixo. */
+.tech-header { border-bottom: 2px solid var(--border); padding-bottom: .8em; }
+.tech-header .tech-name, .tech-header .tech-col { font-size: var(--fs-tech-head);
+  text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; }
+
 /* ---------- Overlays de QR (login / configurar) ---------- */
 #auth, #cfg { position: fixed; inset: 0; z-index: 1000; display: none;
   flex-direction: column; align-items: center; justify-content: center;
@@ -98,6 +429,21 @@ body {
 #auth .qrbox img, #cfg .qrbox img { display: block; width: 260px; height: 260px; }
 #auth .hint, #cfg .hint { font-size: 13px; }
 #auth .expired { color: var(--danger); }
+
+/* Linha "copiar link" sob o QR-code. Escanear so' resolve com o celular na mesma
+   rede; fora dela, o link copiado e' a saida. O campo fica visivel e
+   selecionavel de proposito: em http:// puro o navegador nega a area de
+   transferencia, e selecionar na mao passa a ser o ultimo recurso. */
+#auth .urlrow, #cfg .urlrow { display: flex; gap: 8px; align-items: stretch;
+  width: 100%; max-width: 460px; margin: 4px 0 10px; }
+#auth .urlfield, #cfg .urlfield { flex: 1; min-width: 0; background: var(--panel);
+  color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 13px; font-family: inherit; }
+#auth .copybtn, #cfg .copybtn { background: none; cursor: pointer; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px;
+  font-size: 13px; font-family: inherit; white-space: nowrap; }
+#auth .copybtn:hover, #cfg .copybtn:hover { color: var(--text); border-color: var(--accent); }
+#auth .copybtn.ok, #cfg .copybtn.ok { color: var(--accent); border-color: var(--accent); }
 #cfg .btn { margin-top: 18px; color: var(--muted); text-decoration: none;
   border: 1px solid var(--border); padding: 8px 22px; border-radius: 8px; }
 #cfg .btn:hover { color: var(--text); border-color: var(--accent); }
@@ -123,6 +469,32 @@ button.secondary:hover { color: var(--text); border-color: var(--brand); }
 .msg { margin-top: 14px; font-size: 14px; min-height: 20px; }
 .msg.err { color: var(--danger); }
 .msg.ok { color: var(--on); }
+
+/* Bloco do SGI na tela de configuracao. O <select> nao existia no CSS: espelha
+   o .field input para nao parecer enxertado. O .raw e' saida crua do SGI, usada
+   para desenhar a tela secundaria — some quando ela estiver pronta. */
+.field.sgi { border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.field select { width: 100%; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  font-size: 15px; font-family: inherit; }
+.field select:focus { outline: none; border-color: var(--brand); }
+.raw { max-height: 40vh; overflow: auto; background: var(--bg); color: var(--muted);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px;
+  font-size: 11px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+
+/* Blocos da tela de configuração: um por parte do painel (FullTrack, SGI, TV). */
+.section { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 0 0 18px; }
+.section > h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px;
+  font-size: 17px; color: var(--text); }
+.tag { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 999px; flex: none; }
+.tag.ft { background: rgba(23,207,116,.16); color: var(--brand); }
+.tag.sgi { background: rgba(99,102,241,.20); color: #a5b4fc; }
+.tag.tv { background: rgba(100,116,139,.22); color: var(--muted); }
+/* Explicação curta sob cada campo. */
+.hint { color: var(--muted); font-size: 12.5px; line-height: 1.4; margin: 6px 0 0; }
+.section > .hint { margin: 0 0 14px; }
+.modal-box .field .hint { margin-top: 6px; }
 
 /* lista de veículos (config) */
 .veh-list { max-height: 60vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }

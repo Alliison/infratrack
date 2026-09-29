@@ -44,9 +44,34 @@ class MosaicConfig(BaseModel):
     rotativo: bool = False          # alternar páginas automaticamente
     rotate_seconds: int = 15        # segundos por página (configurável)
     page_size: int = 9              # telas por página no modo rotativo
+    # Inclui a tela do SGI como última página do rodízio (só vale com `rotativo`).
+    sgi_in_rotation: bool = False
+    # Trava a exibição numa tela só, sem desligar os rodízios de cada uma:
+    # "fulltrack" = só o mosaico (grids seguem girando), "sgi" = só o SGI
+    # (cidades/técnicos seguem girando), "none" = alterna como configurado.
+    screen_lock: Literal["none", "fulltrack", "sgi"] = "none"
 
     # Escolhidos no modal de confirmação do celular. "auto" mantém o
     # comportamento antigo: grade deduzida da quantidade de carros e ligados
     # na frente. É para onde o botão "Seguir automático" devolve tudo.
     grid: Literal["auto", "2x2", "2x3"] = "auto"
     sequencia_manual: bool = False  # respeitar a ordem de selected_ids
+
+    # --- Tela secundária (SGI) ---
+    # ⚠️ Credencial do SGI NÃO entra aqui: este modelo é gravado em disco
+    # (mosaic_config.json). Usuário e senha ficam só em RAM, em sgi.py.
+    # `sgi_enabled` guarda apenas a intenção — depois de um restart ele continua
+    # True mas o SGI está desligado, e a tela usa isso para pedir o login de novo
+    # em vez de fingir que está tudo certo.
+    sgi_enabled: bool = False
+    sgi_team: Optional[str] = None   # equipe escolhida; None = sem filtro
+    # Tipos de OS escolhidos na tela. None = ainda não mexeu nisso pelo celular
+    # (usa o padrão do ambiente, `settings.sgi_types`); lista vazia = "todos os
+    # tipos" escolhido explicitamente (sem filtro, igual à semântica do time).
+    sgi_types: Optional[list[str]] = None
+
+
+class SgiEnableRequest(BaseModel):
+    """Credencial do SGI vinda da tela de configuração. Não é persistida."""
+    username: str
+    password: str

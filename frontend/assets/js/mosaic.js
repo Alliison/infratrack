@@ -27,6 +27,7 @@ async function startAuth() {
   const r = await fetch("/api/auth/session", { method: "POST" });
   const s = await r.json();
   $("qrimg").src = s.qr_url;
+  $("authurl").value = s.login_url;
   $("authhint").textContent = "Aguardando leitura…";
   pollAuth(s.session_uuid, Date.now() + s.expires_in * 1000);
 }
@@ -50,6 +51,14 @@ async function pollAuth(uuid, deadline) {
   setTimeout(() => pollAuth(uuid, deadline), 2000);
 }
 
+/* O mosaico embute esta tela num iframe (rodízio) e os dois dividem o token: quando um faz o
+   login (ou o perde), o outro acompanha em vez de mostrar um QR próprio. */
+window.addEventListener("storage", (e) => {
+  if (e.key !== TOKEN_KEY || e.newValue === token) return;
+  token = e.newValue;
+  if (token) { $("auth").classList.remove("show"); boot(); }
+});
+
 /* ---------------- Ciclo de dados ---------------- */
 async function boot() {
   try {
@@ -66,6 +75,10 @@ async function refreshFleet() {
   if (!token) return startAuth();
   // relê o mosaico salvo a cada ciclo — mudanças feitas no celular aplicam ao vivo
   try { cfg = await (await fetch("/api/config")).json(); } catch (_) {}
+  // O SGI só entra no rodízio se estiver de fato configurado (ligado no
+  // backend agora — a flag salva sobrevive a restart, o login não).
+  try { sgiReady = !!(await (await fetch("/api/sgi/status")).json()).enabled; }
+  catch (_) { /* mantém o último valor */ }
   let list;
   try {
     const r = await fetch("/api/fleet", { headers: { Authorization: `Bearer ${token}` } });
@@ -138,6 +151,31 @@ function ensureRotation() {
   if (on) rotateTimer = setInterval(() => { page++; render(lastFleet); }, secs * 1000);
 }
 
+// Página extra do rodízio: a tela do SGI, depois da última página de veículos.
+let sgiReady = false;
+
+let sgiShown = false;
+let sgiLocked = false;
+
+// Avisa a tela do SGI se está na vista e se está travada: ela só avança a
+// rotação de cidades/técnicos por visita (ou a cada atualização, quando
+// travada) — ver `visible`/`locked` em secondary.js.
+function pushSgiVisibility() {
+  try { $("sgi-frame").contentWindow.postMessage(
+    { sgiVisible: sgiShown, sgiLocked }, location.origin); }
+  catch (_) { /* iframe ainda sem documento */ }
+}
+$("sgi-frame").addEventListener("load", pushSgiVisibility);
+
+function showSgiPage(on, locked = false) {
+  const f = $("sgi-frame");
+  if (on && !f.src) f.src = "/secondary";
+  f.classList.toggle("on", on);
+  if (on !== sgiShown || locked !== sgiLocked) {
+    sgiShown = on; sgiLocked = locked; pushSgiVisibility();
+  }
+}
+
 function render(fleet) {
   const mosaic = $("mosaic");
   const { byId, ids: allIds } = computeDisplayed(fleet);
@@ -150,14 +188,36 @@ function render(fleet) {
   const fixo = GRIDS[cfg.grid];
   const pageSize = fixo ? fixo.rows * fixo.cols : Math.max(1, cfg.page_size || 9);
   const pages = rot ? Math.max(1, Math.ceil(allIds.length / pageSize)) : 1;
-  if (page >= pages) page = 0;
-  const ids = rot ? allIds.slice(page * pageSize, page * pageSize + pageSize)
+  // Com o SGI no rodízio ele entra ENTRE os grids: grid 1, SGI, grid 2, SGI...
+  // `step` é a posição na sequência; o grid mostrado é step/2 e os passos
+  // ímpares são a tela do SGI.
+  const lock = cfg.screen_lock || "none";
+  // Travado no SGI: só ele na tela, sem depender do rodízio; o SGI segue
+  // girando cidades/técnicos por dentro. Sem SGI configurado, cai no mosaico.
+  if (lock === "sgi" && sgiReady) {
+    showSgiPage(true, true);
+    $("page").textContent = "SGI · travado";
+    return;
+  }
+  // Travado no FullTrack: o SGI não entra, os grids seguem girando.
+  const sgiOn = rot && !!cfg.sgi_in_rotation && sgiReady && lock !== "fulltrack";
+  const steps = sgiOn ? pages * 2 : pages;
+  if (page >= steps) page = 0;
+  if (sgiOn && page % 2 === 1) {
+    showSgiPage(true);
+    $("page").textContent = `pág ${page + 1}/${steps} · SGI`;
+    return;
+  }
+  showSgiPage(false);
+  const gridPage = sgiOn ? page / 2 : page;
+  const ids = rot ? allIds.slice(gridPage * pageSize, gridPage * pageSize + pageSize)
                   : allIds.slice(0, fixo ? pageSize : allIds.length);
 
   const { rows, cols } = fixo || gridDims(rot && pages > 1 ? pageSize : ids.length);
   $("grid").textContent = ids.length ? `${rows}×${cols}` : "–";
   $("count").textContent = live;
-  $("page").textContent = rot && pages > 1 ? `pág ${page + 1}/${pages}` : "";
+  $("page").textContent = (rot && steps > 1 ? `pág ${page + 1}/${steps}` : "")
+    + (lock === "fulltrack" ? (rot && steps > 1 ? " · " : "") + "FullTrack travado" : "");
   mosaic.style.gridTemplateColumns = `repeat(${cols || 1}, 1fr)`;
   mosaic.style.gridTemplateRows = `repeat(${rows || 1}, 1fr)`;
 
@@ -271,6 +331,7 @@ $("cfgbtn").addEventListener("click", async (e) => {
     if (!r.ok) throw new Error();
     const h = await r.json();
     $("cfgqr").src = h.qr_url;
+    $("cfgurl").value = h.url;
     $("cfg").classList.add("show");
     // Fecha sozinho assim que o celular ler o QR: ninguém precisa voltar na TV
     // para clicar em "Fechar" (o botão fica só como saída manual).
@@ -284,6 +345,44 @@ $("cfgbtn").addEventListener("click", async (e) => {
   } catch (_) { /* ignora */ }
 });
 $("cfgclose").addEventListener("click", (e) => { e.preventDefault(); closeCfg(); });
+
+/* ---------------- Copiar link (alternativa ao QR) ---------------- */
+/* `navigator.clipboard` so existe em contexto seguro (https ou localhost). O
+   ambiente de dev roda em http://<ip-do-tailnet>, onde ele e' undefined — por
+   isso o fallback com execCommand, que ainda funciona fora de contexto seguro.
+   Se os dois falharem, o campo continua selecionavel e o botao diz isso. */
+async function copyField(field, button) {
+  const text = field.value;
+  if (!text) return;
+
+  let ok = false;
+  try {
+    if (window.isSecureContext && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (_) { /* negado: cai no fallback */ }
+
+  if (!ok) {
+    try {
+      field.focus();
+      field.select();
+      field.setSelectionRange(0, text.length);   // iOS ignora select() sozinho
+      ok = document.execCommand("copy");
+    } catch (_) { ok = false; }
+  }
+
+  button.textContent = ok ? "Copiado!" : "Selecione e copie";
+  button.classList.toggle("ok", ok);
+  clearTimeout(button._resetTimer);
+  button._resetTimer = setTimeout(() => {
+    button.textContent = "Copiar";
+    button.classList.remove("ok");
+  }, 2500);
+}
+
+$("authcopy").addEventListener("click", () => copyField($("authurl"), $("authcopy")));
+$("cfgcopy").addEventListener("click", () => copyField($("cfgurl"), $("cfgcopy")));
 
 /* ---------------- Auto-update do front ---------------- */
 /* A TV fica meses com a mesma aba aberta e não tem teclado: publicar front novo

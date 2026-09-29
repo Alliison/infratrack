@@ -1,0 +1,51 @@
+# Rota DEVELOP do TrackInfra (container trackinfra-dev na VM 100, porta 8301) —
+# copia versionada. O arquivo que vale roda no LXC 102:
+# /etc/traefik/dynamic/trackinfra-dev.yml (`watch: true`, recarrega sozinho).
+#
+# ⚠️ Diferenca deliberada em relacao ao trackinfra.yml de producao: aqui NAO ha
+# router na `websecure-alt` (8443). A 8443 e' a porta do port forward do
+# roteador — ficar fora dela deixa o develop alcancavel pela LAN e invisivel da
+# internet. Isso importa porque a /login recebe usuario e senha reais do
+# FullTrack, e um ambiente de teste nao tem motivo para expor isso.
+#
+# Por isso tambem o redirect usa o `https-redirect` SEM porta, que o comentario
+# do trackinfra.yml marca como errado para o prod: lah ele levaria a um beco sem
+# saida na 443 fechada, aqui a 443 e' exatamente o destino certo. O middleware e'
+# definido no notification.yml — referencia entre arquivos e' o padrao da casa
+# (o https-redirect-8443 nasce no proxmox.yml e e' usado por outros oito).
+#
+# Pela LAN o nome resolve sozinho: o wildcard *.it.vistotrack.com do dnsmasq
+# aponta para o Traefik (192.168.20.115), sem nada a criar no DNS. O certificado
+# sai pelo dnsChallenge da Cloudflare, que nao precisa de registro A publico.
+#
+# Acesso: https://infra-dev.it.vistotrack.com   (LAN, sem porta)
+
+http:
+  routers:
+    trackinfra-dev-secure:
+      rule: "Host(`infra-dev.it.vistotrack.com`)"
+      entryPoints:
+        - websecure        # 443 — so LAN, de proposito
+      service: trackinfra-dev-svc
+      tls:
+        certResolver: letsencrypt
+
+    # Quem digita o nome sem "https://" cai na 80 e e' empurrado para a 443.
+    trackinfra-dev-redirect:
+      rule: "Host(`infra-dev.it.vistotrack.com`)"
+      entryPoints:
+        - web
+      service: trackinfra-dev-svc
+      middlewares:
+        - https-redirect
+
+  services:
+    trackinfra-dev-svc:
+      loadBalancer:
+        servers:
+          - url: "http://172.21.1.10:8301"
+        passHostHeader: true
+        healthCheck:
+          path: /healthz
+          interval: "30s"
+          timeout: "5s"

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Impacto — Configurar mosaico</title>
+  <title>Impacto — Configurações</title>
   <!-- Easter egg: o mark de quatro setas nao aparece mais em pagina nenhuma
        (a logo virou o wordmark SVG). Sobrevive aqui, na aba do navegador. -->
   <link rel="icon" type="image/svg+xml" href="/assets/img/impacto-mark.svg">
@@ -13,44 +13,136 @@
   <div class="card">
     <img class="card-logo" src="/assets/img/impacto-logo.svg" alt="Impacto"
          onerror="this.onerror=null;this.src='/assets/img/impacto-mark.svg'">
-    <h1>Mosaico salvo</h1>
-    <p class="sub">Escolha os veículos e as preferências. Deixe tudo desmarcado para exibir <b>todos</b> os carros ligados.</p>
+    <h1>Configurações</h1>
+    <p class="sub">Cada bloco abaixo é de uma parte do painel: o <b>FullTrack</b> (mosaico de veículos), o <b>SGI</b> (ordens de serviço) e a <b>exibição da TV</b> (como as duas telas se alternam).</p>
 
-    <div class="row2">
-      <div class="field">
-        <label for="zoom">Zoom</label>
-        <input id="zoom" type="number" min="3" max="19" value="15">
+    <!-- ============ FULLTRACK — mosaico de veículos ============ -->
+    <section class="section">
+      <h2><span class="tag ft">FullTrack</span> Mosaico de veículos</h2>
+      <p class="hint">Quais veículos aparecem nos mapas e com que frequência a posição é atualizada. O layout (grade e ordem) fica no passo seguinte, em <b>Continuar</b>.</p>
+
+      <div class="row2">
+        <div class="field">
+          <label for="zoom">Zoom do mapa</label>
+          <input id="zoom" type="number" min="3" max="19" value="15">
+          <p class="hint">3 = país inteiro, 19 = rua. Padrão 15.</p>
+        </div>
+        <div class="field">
+          <label for="refresh">Atualizar (s)</label>
+          <input id="refresh" type="number" min="3" max="60" value="6">
+          <p class="hint">Vale para o FullTrack <b>e</b> para o SGI.</p>
+        </div>
       </div>
       <div class="field">
-        <label for="refresh">Atualizar (s)</label>
-        <input id="refresh" type="number" min="3" max="60" value="6">
+        <label class="check"><input type="checkbox" id="only_ligados" checked> No mosaico, exibir só carros ligados</label>
+        <p class="hint">Carros com a ignição desligada ficam de fora da TV.</p>
       </div>
-    </div>
-    <div class="field">
-      <label class="check"><input type="checkbox" id="only_ligados" checked> No mosaico, exibir só carros ligados</label>
-    </div>
 
-    <div class="field">
-      <label>Veículos <span id="selcount" class="sub"></span></label>
-      <input id="filter" placeholder="Filtrar por placa ou modelo…" autocapitalize="none" style="margin-bottom:8px">
-      <label class="check" style="margin-bottom:8px">
-        <input type="checkbox" id="listOnlyLigados"> Mostrar só ligados na lista
-      </label>
-      <div class="veh-list" id="list">Carregando…</div>
-    </div>
+      <div class="field">
+        <label>Veículos <span id="selcount" class="sub"></span></label>
+        <p class="hint">Deixe tudo desmarcado para exibir <b>todos</b> os carros ligados.</p>
+        <input id="filter" placeholder="Filtrar por placa ou modelo…" autocapitalize="none" style="margin-bottom:8px">
+        <label class="check" style="margin-bottom:8px">
+          <input type="checkbox" id="listOnlyLigados"> Mostrar só ligados na lista
+        </label>
+        <div class="veh-list" id="list">Carregando…</div>
+      </div>
+      <button class="secondary" id="clear" type="button">Limpar selecionados</button>
+    </section>
 
-    <button class="secondary" id="clear" type="button">Limpar selecionados</button>
-    <button class="primary" id="save">Continuar</button>
+    <!-- ============ SGI — ordens de serviço ============ -->
+    <!-- A credencial vive so' em RAM no backend, igual a' do FullTrack: depois de
+         um restart e' preciso habilitar de novo. Por isso o estado vem do servidor
+         a cada abertura, nunca do localStorage. -->
+    <section class="section">
+      <h2><span class="tag sgi">SGI</span> Ordens de serviço</h2>
+      <p class="hint">Alimenta a tela de ordens e técnicos. O login não é gravado: depois de um reinício do sistema é preciso conectar de novo.</p>
+      <p class="sub" id="sgi-state">Verificando…</p>
+
+      <button class="secondary" id="sgi-enable" type="button" hidden>Habilitar SGI</button>
+
+      <div id="sgi-form" hidden>
+        <div class="field">
+          <label for="sgi-user">Usuário do SGI</label>
+          <input id="sgi-user" autocapitalize="none" autocorrect="off"
+                 autocomplete="username" placeholder="seu.usuario">
+        </div>
+        <div class="field">
+          <label for="sgi-pass">Senha do SGI</label>
+          <input id="sgi-pass" type="password" autocomplete="current-password">
+        </div>
+        <button class="primary" id="sgi-connect" type="button">Conectar ao SGI</button>
+        <button class="secondary" id="sgi-cancel" type="button">Cancelar</button>
+      </div>
+
+      <div id="sgi-on" hidden>
+        <div class="field">
+          <label for="sgi-team">Equipe</label>
+          <select id="sgi-team"><option value="">Todas</option></select>
+          <p class="hint">Só as ordens dessa equipe entram nos números e no resumo dos técnicos.</p>
+          <p class="sub" id="sgi-team-hint"></p>
+        </div>
+        <div class="field">
+          <label>Tipo de OS</label>
+          <div class="choice" id="sgi-types">
+            <button type="button" data-type="infra">Infraestrutura</button>
+            <button type="button" data-type="pickup">Retirada</button>
+            <button type="button" data-type="installation">Instalação</button>
+          </div>
+          <p class="hint">Nenhum marcado = todos os tipos.</p>
+        </div>
+        <button class="secondary" id="sgi-test" type="button">Testar consulta de hoje</button>
+        <button class="secondary" id="sgi-disable" type="button">Desabilitar SGI</button>
+        <pre class="raw" id="sgi-out" hidden></pre>
+      </div>
+
+      <div class="msg" id="sgi-msg"></div>
+    </section>
+
+    <!-- ============ EXIBIÇÃO DA TV — as duas telas juntas ============ -->
+    <section class="section">
+      <h2><span class="tag tv">TV</span> Exibição das telas</h2>
+      <p class="hint">Como a TV alterna entre o mosaico do FullTrack e a tela do SGI. Salva sozinho, sem passar pelo layout.</p>
+
+      <div class="field">
+        <label class="check"><input type="checkbox" id="cf-rotativo"> Rodízio de páginas</label>
+        <p class="hint">A TV troca de página sozinha. Sem isto, fica sempre na primeira página do mosaico.</p>
+      </div>
+      <div class="field">
+        <label for="cf-rotate">Trocar a cada (s)</label>
+        <input id="cf-rotate" type="number" min="3" max="120" value="15">
+        <p class="hint">Quanto tempo cada página fica na tela, inclusive a do SGI.</p>
+      </div>
+      <div class="field">
+        <label class="check"><input type="checkbox" id="cf-sgi-rot"> Incluir a tela do SGI no rodízio</label>
+        <p class="hint">O SGI entra entre as páginas do mosaico. Só aparece com o SGI conectado e o rodízio ligado.</p>
+      </div>
+      <div class="field">
+        <label for="cf-lock">Travar em uma tela</label>
+        <select id="cf-lock">
+          <option value="none">Não travar (alternar)</option>
+          <option value="fulltrack">Só FullTrack (mosaico)</option>
+          <option value="sgi">Só SGI</option>
+        </select>
+        <p class="hint">Fixa a TV numa tela só. Os rodízios de dentro de cada uma continuam (páginas do mosaico, cidades e técnicos do SGI).</p>
+      </div>
+      <button class="secondary" id="tv-save" type="button">Salvar exibição</button>
+      <div class="msg" id="tv-msg"></div>
+    </section>
+
+    <button class="primary" id="save">Continuar — layout do mosaico</button>
+    <p class="hint">Escolhe a grade, quantas telas por página e a ordem dos veículos.</p>
     <div class="msg" id="msg"></div>
     <p class="sub" style="margin-top:16px"><a href="/" style="color:var(--accent)">← Voltar ao mosaico</a></p>
   </div>
 
-  <!-- Confirmacao: abre depois de escolher os veiculos e e' onde se decide o
-       layout. "Seguir automatico" sai daqui sem impor nada — salva so' a
-       selecao e devolve grade/sequencia para o automatico de sempre. -->
+  <!-- Layout do mosaico: abre depois de escolher os veiculos. "Seguir
+       automatico" sai daqui sem impor nada — salva so' a selecao e devolve
+       grade/sequencia para o automatico de sempre. Rodizio, tempos e SGI ficam
+       no bloco "Exibicao das telas" da pagina. -->
   <div class="modal" id="confirm">
     <div class="modal-box">
-      <h2>Confirmar mosaico</h2>
+      <h2>Layout do mosaico</h2>
       <p class="sub" id="cf-resumo"></p>
 
       <div class="field">
@@ -60,20 +152,13 @@
           <button type="button" data-grid="2x2">2×2</button>
           <button type="button" data-grid="2x3">2×3</button>
         </div>
+        <p class="hint">Automática deduz a grade pelo número de carros. 2×2 e 2×3 fixam o tamanho da página.</p>
       </div>
 
       <div class="field">
-        <label class="check"><input type="checkbox" id="cf-rotativo"> Rodízio de páginas</label>
-      </div>
-      <div class="row2">
-        <div class="field">
-          <label for="cf-rotate">Trocar a cada (s)</label>
-          <input id="cf-rotate" type="number" min="3" max="120" value="15">
-        </div>
-        <div class="field">
-          <label for="cf-page-size">Telas por página</label>
-          <input id="cf-page-size" type="number" min="1" max="16" value="9">
-        </div>
+        <label for="cf-page-size">Telas por página</label>
+        <input id="cf-page-size" type="number" min="1" max="16" value="9">
+        <p class="hint">Quantos mapas cabem numa página. Com grade fixa é calculado sozinho (2×2 = 4).</p>
       </div>
 
       <div class="field">

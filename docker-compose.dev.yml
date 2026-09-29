@@ -1,0 +1,70 @@
+# Stack de DEVELOP do TrackInfra — sobe ao lado da producao, sem tocar nela.
+#
+# Uso (o "-p" nao e' opcional: e' ele que da nome proprio ao projeto e, com isso,
+# volume e rede separados dos da producao):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+#                  -p trackinfra-dev up -d --build
+#
+# O que fica isolado do prod:
+#   container   trackinfra-dev              (prod: trackinfra)
+#   porta       172.21.1.10:8301            (prod: 8300)
+#   volume      trackinfra-dev_..._data     (prod: infratrack_trackinfra_data)
+#   hostname    infra-dev.it.vistotrack.com (prod: infra.it.vistotrack.com)
+#
+# O volume separado e' o que garante que o mosaico salvo durante um teste nao
+# sobrescreva o da TV que esta no ar.
+#
+# ⚠️ O `!override` nas listas nao e' estilo, e' necessidade: o compose MESCLA
+# `ports` e `env_file` entre arquivos em vez de substituir. Sem ele o dev
+# tentaria subir tambem na 8300 e colidiria com o container de producao.
+
+services:
+
+  api:
+    container_name: trackinfra-dev
+
+    ports: !override
+      # Perna interna: por onde o Traefik chega (rota de LAN). Mesmo endereco que
+      # o compose de producao usa, por isso literal como lah.
+      - "${DEV_INTERNAL_IP:-172.21.1.10}:8301:8300"
+      # Perna do tailnet: testar de fora da LAN sem mexer em VLAN/DHCP. O IP NAO
+      # e' fixo aqui de proposito — ele muda se o node for recriado no tailnet, e
+      # um literal quebraria a stack sem dizer por que. Quem resolve e'
+      # deploy/dev-up.sh, com `tailscale ip -4`.
+      #
+      # So no dev: a producao continua deliberadamente FORA do tailnet, porque a
+      # /login recebe usuario e senha do FullTrack (ver README do projeto).
+      - "${TAILSCALE_IP:?defina TAILSCALE_IP ou use deploy/dev-up.sh}:8301:8300"
+
+    # .env.dev completo, e nao um delta sobre o .env do prod: no merge padrao os
+    # dois seriam carregados e a precedencia ficaria implicita demais para uma
+    # variavel que decide o destino do QR-code.
+    env_file: !override
+      - backend/.env.dev
+
+    # Codigo montado do host: editar em /opt/infratrack e o uvicorn recarrega,
+    # sem rebuild. Somente-leitura porque quem edita e' o host, nao o container.
+    volumes:
+      - ./backend/app:/app/backend/app:ro
+      - ./frontend:/app/frontend:ro
+
+    # `environment` tem precedencia sobre `env_file`: e' assim que a URL do QR-code
+    # segue o IP do tailnet sem ninguem editar arquivo. O trafego vai cifrado pelo
+    # WireGuard, mas em HTTP — o navegador marca "nao seguro". Para HTTPS de
+    # verdade: habilitar "HTTPS Certificates" no admin do Tailscale e trocar o
+    # bind por `tailscale serve`.
+    environment:
+      TRACKINFRA_PUBLIC_BASE_URL: "http://${TAILSCALE_IP:?defina TAILSCALE_IP ou use deploy/dev-up.sh}:8301"
+
+    # Endurecimento do prod relaxado de proposito aqui: o rootfs somente-leitura
+    # atrapalha o ciclo de desenvolvimento e nao protege nada que o dev exponha.
+    read_only: false
+
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8300
+      --proxy-headers --forwarded-allow-ips=172.21.1.2
+      --reload --reload-dir /app/backend/app
+
+    # Nota: o --reload-dir cobre so o Python. O front e' lido do disco a cada
+    # request, entao mudanca em html/js/css aparece com um F5 na TV.

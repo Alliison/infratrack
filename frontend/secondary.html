@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Impacto — Painel</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/img/impacto-mark.svg">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <div id="topbar">
+    <span class="brand-lockup">
+      <img class="brand-logo" src="/assets/img/impacto-logo.svg" alt="Impacto"
+           onerror="this.onerror=null;this.src='/assets/img/impacto-mark.svg'">
+    </span>
+    <span class="sep"></span>
+    <span class="stat" id="clock">–</span>
+    <span class="stat" id="updated">–</span>
+    <a class="btn" href="#" id="cfgbtn">Configurar</a>
+  </div>
+
+  <!-- Grid responsivo de TV: fileira de cima (4 colunas, 2fr:1fr:1fr:1fr) +
+       card de resumo ocupando a largura toda embaixo. Ver #secondary e
+       .top-row em app.css — nenhum tamanho é mais px fixo, tudo escala com a
+       resolução. -->
+  <div id="secondary">
+    <div class="top-row">
+      <div class="card completion" id="card-completion">
+        <h2>Conclusão de hoje</h2>
+        <div class="big-compact">
+          <span id="sec-done">–</span><span class="sep">/</span><span id="sec-total2">–</span>
+        </div>
+        <!-- Linha única, texto corrido — nem lado a lado (não sobrava
+             largura pros rótulos), nem lista vertical (cresceu demais em
+             altura). Um separador "·" simples entre os três, sem grid nem
+             chip. -->
+        <div class="stats-compact">
+          <span><b id="sec-completed">–</b> concluídas</span>
+          <span class="dot">·</span>
+          <span><b id="sec-unproductive">–</b> improdutivas</span>
+          <span class="dot">·</span>
+          <span><b id="sec-closed">–</b> fechadas</span>
+        </div>
+        <div class="msg" id="sec-msg"></div>
+      </div>
+
+      <div class="card half" id="card-todo">
+        <h2>À fazer</h2>
+        <div class="big-compact"><span id="sec-todo">–</span></div>
+      </div>
+
+      <div class="card half" id="card-inprogress">
+        <h2>Em andamento</h2>
+        <div class="big-compact"><span id="sec-inprogress">–</span></div>
+      </div>
+
+      <div class="card half" id="card-expired">
+        <h2>Expiradas</h2>
+        <div class="big-compact"><span id="sec-expired">–</span></div>
+      </div>
+    </div>
+
+    <!-- Segunda linha do grid: ocupa a largura toda e preenche o que sobra
+         da tela. Cidades em acordeão automático (rotação, sem clique) — ver
+         renderCities() em secondary.js. -->
+    <div class="card summary" id="card-summary">
+      <h2>Resumo das ordens</h2>
+      <div class="cities" id="sec-cities"></div>
+    </div>
+  </div>
+
+  <!-- Área da direita (60% da tela) — primeiro rascunho: resumo por técnico
+       (ordersByTechnician). Layout ainda em desenho. -->
+  <div id="tertiary">
+    <div class="card technicians">
+      <h2>Resumo dos técnicos</h2>
+      <div class="tech-table">
+        <div class="tech-row tech-header">
+          <span class="tech-name">Técnico</span>
+          <span class="tech-col">Aproveitamento de hoje</span>
+        </div>
+        <div id="sec-technicians"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="auth">
+    <img class="logo-lg" src="/assets/img/impacto-logo.svg" alt="Impacto"
+         onerror="this.onerror=null;this.src='/assets/img/impacto-mark.svg'">
+    <p>Escaneie o QR-code com o celular para liberar o painel com sua conta
+       FullTrack — ou copie o link abaixo, se o celular não estiver nesta rede.</p>
+    <div class="qrbox"><img id="qrimg" alt="QR-code de login"></div>
+    <div class="urlrow">
+      <input id="authurl" class="urlfield" readonly aria-label="Link de login">
+      <button id="authcopy" class="copybtn" type="button">Copiar</button>
+    </div>
+    <p class="hint" id="authhint">Aguardando leitura…</p>
+  </div>
+
+  <div id="cfg">
+    <h1>Configurar painel</h1>
+    <p>Escaneie o QR-code para habilitar o SGI e escolher a equipe pelo celular
+       — ou copie o link abaixo.</p>
+    <div class="qrbox"><img id="cfgqr" alt="QR-code de configuração"></div>
+    <div class="urlrow">
+      <input id="cfgurl" class="urlfield" readonly aria-label="Link de configuração">
+      <button id="cfgcopy" class="copybtn" type="button">Copiar</button>
+    </div>
+    <p class="hint">As mudanças salvas aparecem aqui automaticamente.</p>
+    <a class="btn" href="#" id="cfgclose">Fechar</a>
+  </div>
+
+  <script src="/assets/js/secondary.js"></script>
+</body>
+</html>

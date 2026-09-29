@@ -1,6 +1,9 @@
+import asyncio
+import contextlib
 import hashlib
 import io
 from pathlib import Path
+from typing import Optional
 
 import httpx
 import qrcode
@@ -8,13 +11,30 @@ from fastapi import Depends, FastAPI, HTTPException, Header
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import fulltrack, storage
+from . import fulltrack, sgi, storage
 from .config import settings
-from .models import (LoginRequest, MosaicConfig, SessionResponse, StatusResponse,
-                     Vehicle)
+from .models import (LoginRequest, MosaicConfig, SessionResponse, SgiEnableRequest,
+                     StatusResponse, Vehicle)
 from .sessions import AppSession, store
 
-app = FastAPI(title="TrackInfra", version="1.0.0")
+@contextlib.asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Sobe o health check do token do SGI junto com o app.
+
+    Roda mesmo com o SGI desabilitado: o loop checa `is_enabled()` a cada ciclo,
+    entao habilitar pela tela nao precisa reiniciar nada.
+    """
+    await sgi.autoenable_from_env()
+    task = asyncio.create_task(sgi.health_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+app = FastAPI(title="TrackInfra", version="1.0.0", lifespan=lifespan)
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
 
@@ -26,6 +46,13 @@ def _asset_version() -> str:
     recarrega quando ela muda. Derivada do CONTEUDO dos arquivos, nunca da hora
     de boot — com timestamp, todo restart do backend recarregaria os paineis a
     toa, e um deploy que nao mexeu no front nao deve mexer na tela de ninguem.
+
+    Recalculada A CADA CHAMADA (nao guardada numa global calculada soh no
+    import): em producao tanto faz, porque front so muda com um restart. Mas
+    no dev o front eh lido do volume montado, sem restart nenhum do processo
+    (--reload-dir soh cobre .py) — se isto fosse calculado uma vez soh, editar
+    CSS/HTML/JS nunca mudaria a versao, e a TV de teste nunca recarregaria
+    sozinha pra mostrar o que mudou.
     """
     h = hashlib.sha256()
     for p in sorted(FRONTEND.rglob("*")):
@@ -33,9 +60,6 @@ def _asset_version() -> str:
             h.update(p.relative_to(FRONTEND).as_posix().encode())
             h.update(p.read_bytes())
     return h.hexdigest()[:12]
-
-
-ASSET_VERSION = _asset_version()
 
 
 class NoCacheStatic(StaticFiles):
@@ -200,6 +224,105 @@ async def config_handoff_redeem(uuid: str):
     return {"access_token": token}
 
 
+# ===== SGI (tela secundária) =============================================
+@app.get("/api/sgi/status")
+async def sgi_status():
+    """Estado do SGI para a tela. Sem autenticação: não devolve dado nenhum do
+    SGI, só se está ligado — e a tela de configuração precisa disso para saber
+    qual formulário mostrar antes de qualquer token."""
+    st = sgi.status()
+    st["base_url"] = settings.sgi_base_url
+    return st
+
+
+@app.post("/api/sgi/enable")
+async def sgi_enable(body: SgiEnableRequest, session: AppSession = Depends(current_session)):
+    """Habilita o SGI com a credencial que o usuário digitou no celular.
+
+    Exige sessão do FullTrack: quem configura é quem já provou ter acesso ao
+    painel. A senha do SGI fica só em RAM (ver sgi.py) — o que é persistido em
+    disco é apenas o flag `sgi_enabled`.
+    """
+    try:
+        st = await sgi.enable(body.username.strip(), body.password)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    cfg = storage.load_config()
+    cfg.sgi_enabled = True
+    storage.save_config(cfg)
+    return st
+
+
+@app.post("/api/sgi/disable")
+async def sgi_disable(session: AppSession = Depends(current_session)):
+    st = await sgi.disable()
+    cfg = storage.load_config()
+    cfg.sgi_enabled = False
+    storage.save_config(cfg)
+    return st
+
+
+@app.get("/api/sgi/summary")
+async def sgi_summary(city: Optional[str] = None, category_id: Optional[str] = None,
+                       session: AppSession = Depends(current_session)):
+    """Resumo de ordens de serviço de HOJE. Painel é real time: sem seletor de data.
+
+    Equipe e tipo(s) de OS vêm da configuração salva — nenhum filtro fixo no
+    código. `city` e `category_id`, opcionais, descem de nível na tela
+    secundária: cidade -> categoria -> status (`scheduled`/`inProgress`/
+    `expired`), cada um filtrando o resumo mais fundo que o de cima.
+    """
+    if not sgi.is_enabled():
+        raise HTTPException(status_code=409, detail="SGI não habilitado.")
+    cfg = storage.load_config()
+    try:
+        return await sgi.fetch_summary(team_id=cfg.sgi_team, types=cfg.sgi_types,
+                                        cities=[city] if city else None,
+                                        category_ids=[category_id] if category_id else None)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"SGI respondeu {exc.response.status_code}.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/sgi/technicians")
+async def sgi_technicians(session: AppSession = Depends(current_session)):
+    """Ficha dos técnicos ({id: {status, isAvailable, ...}}) — avatar e legenda do resumo."""
+    if not sgi.is_enabled():
+        raise HTTPException(status_code=409, detail="SGI não habilitado.")
+    try:
+        return await sgi.fetch_technicians()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"SGI respondeu {exc.response.status_code}.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/sgi/teams")
+async def sgi_teams(session: AppSession = Depends(current_session)):
+    """Equipes para o seletor. Vêm do SGI, nunca de lista mantida aqui."""
+    if not sgi.is_enabled():
+        raise HTTPException(status_code=409, detail="SGI não habilitado.")
+    try:
+        return await sgi.fetch_teams()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/sgi/discover")
+async def sgi_discover(session: AppSession = Depends(current_session)):
+    """Contrato do SGI conforme a spec OpenAPI que ele publica.
+
+    Substituiu a antiga varredura por endpoints chutados: aqui a resposta vem da
+    fonte de verdade, e mostra se o `teamId` do filtro de equipe ainda existe.
+    """
+    if not sgi.is_enabled():
+        raise HTTPException(status_code=409, detail="SGI não habilitado.")
+    return await sgi.discover()
+
+
 # ===== Front (páginas) ===================================================
 @app.get("/healthz")
 async def healthz():
@@ -211,7 +334,7 @@ async def version():
     """Versao do front. A TV compara com a que carregou e se recarrega sozinha
     quando muda — e' o unico jeito de publicar front novo num painel de parede,
     que nao tem quem aperte F5."""
-    return JSONResponse({"version": ASSET_VERSION},
+    return JSONResponse({"version": _asset_version()},
                         headers={"Cache-Control": "no-store"})
 
 
@@ -219,8 +342,24 @@ async def version():
 async def index():
     # no-cache tambem aqui: de nada adianta a TV recarregar se o proprio HTML
     # vier do cache apontando para os assets antigos.
-    return FileResponse(FRONTEND / "index.html",
-                        headers={"Cache-Control": "no-cache"})
+    #
+    # A tela do SGI agora entra no rodízio do próprio mosaico (iframe, ver
+    # `sgi_in_rotation`), então `/` serve sempre o mosaico. O antigo flag
+    # `secondary_screen_only` (dev: `/` só com o SGI) deixou de ter efeito.
+    page = "index.html"
+    return FileResponse(FRONTEND / page, headers={"Cache-Control": "no-cache"})
+
+
+# Página do SGI em rota própria: o mosaico a embute (iframe) como mais uma página
+# do rodízio, ver `sgi_in_rotation`. `/` não muda.
+@app.get("/mosaic")
+async def mosaic_page():
+    return FileResponse(FRONTEND / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/secondary")
+async def secondary_page():
+    return FileResponse(FRONTEND / "secondary.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/login")
