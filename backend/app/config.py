@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     sgi_types: list[str] = ["infra"]
     sgi_date_field: str = "scheduled_date"
 
+    # TEMPORÁRIO: grava sessões da TV e credencial do SGI em /data (texto puro,
+    # 0600) para sobreviverem a restart/deploy. Ver persist.py.
+    persist_sessions: bool = False
+
     # Persistência do mosaico salvo
     config_path: str = "mosaic_config.json"
 

@@ -32,6 +32,10 @@ services:
       # __pycache__ a cada import.
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
+      # TEMPORARIO: sessoes da TV e credencial do SGI sobrevivem a deploy/restart
+      # (gravadas em /data/sessions_state.json, texto puro, 0600). Ver persist.py
+      # para limpar tudo e remover esta linha.
+      TRACKINFRA_PERSIST_SESSIONS: "true"
 
     volumes:
       # Unico ponto gravavel alem do /tmp. O TRACKINFRA_CONFIG_PATH do .env

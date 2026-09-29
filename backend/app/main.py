@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import fulltrack, sgi, storage
+from . import persist
 from .config import settings
 from .models import (LoginRequest, MosaicConfig, SessionResponse, SgiEnableRequest,
                      StatusResponse, Vehicle)
@@ -25,13 +26,17 @@ async def lifespan(_: FastAPI):
     entao habilitar pela tela nao precisa reiniciar nada.
     """
     await sgi.autoenable_from_env()
+    await persist.restore()
     task = asyncio.create_task(sgi.health_loop())
+    save_task = asyncio.create_task(persist.save_loop())
     try:
         yield
     finally:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        persist.save(force=True)
+        for t in (task, save_task):
+            t.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await t
 
 
 app = FastAPI(title="TrackInfra", version="1.0.0", lifespan=lifespan)

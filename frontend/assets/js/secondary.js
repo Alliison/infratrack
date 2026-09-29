@@ -125,7 +125,6 @@ function renderCompletionOff(detail) {
   $("sec-msg").textContent = detail || "SGI não habilitado. Configure pelo celular.";
   $("sec-todo").textContent = "–";
   $("sec-inprogress").textContent = "–";
-  $("sec-closed").textContent = "–";
   $("sec-expired").textContent = "–";
   renderCities([]);
   renderTechnicians([]);
@@ -143,9 +142,6 @@ function renderCompletion(s) {
   const completed = s.completed || 0;
   const unproductive = s.unproductive || 0;
   const closed = s.closed || 0;
-  $("sec-completed").textContent = completed;
-  $("sec-unproductive").textContent = unproductive;
-  $("sec-closed").textContent = closed;
   $("sec-done").textContent = closed + completed + unproductive;
   $("sec-total2").textContent = total;
   $("sec-todo").textContent = (s.scheduled || 0) + (s.rescheduled || 0);
