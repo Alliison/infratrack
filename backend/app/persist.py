@@ -1,9 +1,13 @@
 """Sessoes persistidas em disco — TEMPORARIO (autorizado pelo responsavel).
 
-Por padrao (e no dev) credenciais ficam so em RAM. Com
-TRACKINFRA_PERSIST_SESSIONS=true este modulo grava, no volume /data, as
-sessoes da TV (cookies, token, usuario e senha do FullTrack) e a credencial do
-SGI, para um restart/deploy nao derrubar a TV no QR nem desconectar o SGI.
+Por padrao credenciais ficam so em RAM. Com TRACKINFRA_PERSIST_SESSIONS=true
+este modulo grava, no volume /data, as contas (cookies, token, usuario e senha
+do FullTrack), os tokens das TVs e celulares e a credencial do SGI, para um
+restart/deploy nao derrubar as TVs no QR nem desconectar o SGI. Nome e config
+de cada TV nao estao aqui: vao sempre para devices.json (ver devices.py).
+
+Formato 2 (contas + tokens). O formato 1 (lista solta de sessoes de TV) ainda
+e' lido e migrado no restore — e' o que a producao grava hoje.
 
 Contem SENHAS EM TEXTO PURO (arquivo 0600, so no volume). Para limpar tudo:
     docker exec trackinfra rm -f /data/sessions_state.json && docker restart trackinfra
@@ -13,11 +17,12 @@ import asyncio
 import json
 import logging
 import os
+import secrets
 from pathlib import Path
 
-from . import sgi
+from . import devices, sgi
 from .config import settings
-from .sessions import AppSession, FulltrackAuth, store
+from .sessions import Account, AppSession, FulltrackAuth, account_key, store
 
 logger = logging.getLogger("trackinfra.persist")
 SAVE_EVERY = 30  # s — pega renovacoes de cookie/token feitas por fora
@@ -28,17 +33,19 @@ def _path() -> Path:
 
 
 def _snapshot() -> dict:
-    apps = []
-    for s in store._app.values():
-        if (s.ttl or settings.app_token_ttl) > 0:   # tokens curtos do celular nao
-            continue
-        a = s.auth
-        apps.append({"app_token": s.app_token, "created_at": s.created_at,
-                     "cookies": a.cookies, "token": a.token,
-                     "token_obtained_at": a.token_obtained_at,
-                     "login_user": a.login_user, "password": a.password})
+    accounts = []
+    for acc in store._accounts.values():
+        a = acc.auth
+        accounts.append({"id": acc.id, "created_at": acc.created_at,
+                         "cookies": a.cookies, "token": a.token,
+                         "token_obtained_at": a.token_obtained_at,
+                         "login_user": a.login_user, "password": a.password})
+    grants = [{"app_token": g.app_token, "account_id": g.account.id, "kind": g.kind,
+               "device_id": g.device_id, "id": g.id, "label": g.label,
+               "created_at": g.created_at, "idle_ttl": g.idle_ttl}
+              for g in store._app.values()]
     st = sgi._state
-    return {"app_sessions": apps,
+    return {"version": 2, "accounts": accounts, "grants": grants,
             "sgi": ({"username": st.username, "password": st.password,
              "totp_secret": st.totp_secret} if st else None)}
 
@@ -62,6 +69,31 @@ def save(force: bool = False) -> None:
     _last = data
 
 
+def _account_from(d: dict) -> Account:
+    auth = FulltrackAuth(cookies=d.get("cookies") or {}, token=d.get("token") or {},
+                         token_obtained_at=d.get("token_obtained_at", 0),
+                         login_user=d.get("login_user"), password=d.get("password"))
+    key = d.get("id") or account_key(d.get("login_user") or "")
+    acc = store._accounts.get(key)
+    if not acc:
+        acc = Account(id=key, auth=auth, created_at=d.get("created_at", 0))
+        store._accounts[key] = acc
+    return acc
+
+
+def _restore_v1(data: dict) -> None:
+    """Formato antigo (antes das contas/dispositivos): uma lista de sessões de
+    TV soltas. Cada uma vira uma TV registrada na conta do seu usuário, com a
+    configuração global que ela já exibia — a TV nem percebe a migração."""
+    for d in data.get("app_sessions", []):
+        acc = _account_from(d)
+        dev = devices.claim(acc.id, None)
+        store._app[d["app_token"]] = AppSession(app_token=d["app_token"], account=acc,
+                                                kind="tv", device_id=dev.id,
+                                                created_at=d.get("created_at", 0))
+    logger.info("sessoes no formato antigo migradas: %d TV(s)", len(data.get("app_sessions", [])))
+
+
 async def restore() -> None:
     if not settings.persist_sessions:
         return
@@ -73,13 +105,23 @@ async def restore() -> None:
     except Exception as exc:  # noqa: BLE001 — arquivo ruim nao derruba o app
         logger.warning("sessoes salvas ilegiveis, ignorando: %s", exc)
         return
-    for d in data.get("app_sessions", []):
-        auth = FulltrackAuth(cookies=d["cookies"], token=d["token"],
-                             token_obtained_at=d.get("token_obtained_at", 0),
-                             login_user=d.get("login_user"), password=d.get("password"))
-        store._app[d["app_token"]] = AppSession(app_token=d["app_token"], auth=auth,
-                                                created_at=d.get("created_at", 0))
-    logger.info("%d sessao(oes) da TV restaurada(s)", len(data.get("app_sessions", [])))
+    if data.get("version") != 2:
+        _restore_v1(data)
+    else:
+        for d in data.get("accounts", []):
+            _account_from(d)
+        n = 0
+        for g in data.get("grants", []):
+            acc = store._accounts.get(g["account_id"])
+            if not acc:
+                continue
+            store._app[g["app_token"]] = AppSession(
+                app_token=g["app_token"], account=acc, kind=g.get("kind", "tv"),
+                device_id=g.get("device_id"), id=g.get("id") or secrets.token_urlsafe(8),
+                label=g.get("label", ""), created_at=g.get("created_at", 0),
+                idle_ttl=g.get("idle_ttl", 0))
+            n += 1
+        logger.info("%d conta(s), %d token(s) restaurado(s)", len(data.get("accounts", [])), n)
     s = data.get("sgi")
     if s and not sgi.is_enabled():
         try:

@@ -33,6 +33,27 @@ carro** a cada atualização, então o veículo nunca "sai" da tela.
 5. A TV, em polling no `GET /api/auth/status/<uuid>`, recebe o token opaco e
    começa a renderizar o mosaico.
 
+### Contas, TVs e celulares
+
+- **Conta** = um usuário do FullTrack. Guarda a única sessão do FullTrack dela;
+  todas as TVs da conta usam essa sessão (e a frota é buscada uma vez a cada
+  2 s por conta, não uma vez por TV).
+- **TV (dispositivo)** = token próprio + nome + configuração própria (carros,
+  trava FullTrack/SGI, rodízio, equipe/tipo do SGI). Duas TVs da mesma conta
+  podem mostrar carros diferentes, ou uma presa no FullTrack e outra no SGI.
+- **Celular (controle)** = quem loga com a senha vira controle da conta (token
+  que expira após 7 dias sem uso, `TRACKINFRA_CONTROLLER_TOKEN_TTL`). Com ele:
+  - escanear o QR de uma **TV nova** oferece *Liberar sem senha*;
+  - `/devices` lista as TVs: no ar ou não, tela atual, página, placas na tela,
+    trava de tela com um toque, **Configurar**, **Espelhar** (vê no celular o
+    que a TV mostra), **Identificar** (nome em tela cheia), **Recarregar**,
+    **Desconectar** só ela, e **Desconectar tudo**.
+- O QR **Configurar** da TV dá um controle curto (15 min parado) já apontado
+  para aquela TV.
+- Desconectar (uma, ou tudo) mantém nome e configuração no registro: a TV
+  manda o `device_id` que lembra ao pedir QR novo e volta como era.
+- Teste com duas TVs no mesmo navegador: `/?tv=2` usa chaves separadas.
+
 ### Como os dados chegam
 - Frota: `POST fulltrackapp.com/mapaGeral_v2/getDados` (cookie de sessão) →
   normalizado em `/api/fleet`.
@@ -65,7 +86,7 @@ containers. Topologia e procedimento completos em `/opt/infra/README.md`.
 | URL | `https://infra.it.vistotrack.com:8443` |
 | Porta interna | `172.21.1.10:8300` (só a interface interna — o Traefik chega por ela) |
 | Rota do Traefik | `/etc/traefik/dynamic/trackinfra.yml` no LXC 102 — cópia em `deploy/traefik/` |
-| Banco | nenhum. Sessões em memória; mosaico salvo no volume `infratrack_trackinfra_data` |
+| Banco | nenhum. No volume `infratrack_trackinfra_data`: `devices.json` (nome/config de cada TV, sem segredo), `sessions_state.json` (contas e tokens, com `PERSIST_SESSIONS`) e `mosaic_config.json` (config "da casa": molde de TV nova + flag do SGI) |
 | Healthcheck | `/healthz`, no container e no Traefik |
 
 ```bash
@@ -105,25 +126,37 @@ ssh nuc1 'pct exec 102 -- journalctl -u traefik -n 30 --no-pager'   # erro de co
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| POST | `/api/auth/session` | cria sessão de QR (TV) |
+| POST | `/api/auth/session` | cria sessão de QR (TV; corpo opcional `{device_id}`) |
 | GET  | `/api/auth/qr/{uuid}.png` | imagem do QR |
-| POST | `/api/auth/login` | celular envia credenciais |
-| GET  | `/api/auth/status/{uuid}` | polling da TV |
+| POST | `/api/auth/login` | celular envia credenciais; devolve token de controle |
+| POST | `/api/auth/pair` | celular-controle libera TV nova sem senha |
+| GET  | `/api/auth/status/{uuid}` | polling da TV (token + `device_id`) |
+| GET  | `/api/me` | dono do token (tv/controller, conta, TV) |
 | GET  | `/api/fleet` | frota normalizada (Bearer) |
 | GET  | `/api/notifications/total` | alertas não lidos (Bearer) |
-| GET/POST | `/api/config` | mosaico salvo |
+| GET/POST | `/api/config[?device=]` | config da TV (a própria; o celular passa `device`) |
+| GET  | `/api/devices` | TVs e celulares da conta (controle) |
+| PATCH/DELETE | `/api/devices/{id}` | renomear / esquecer TV |
+| POST | `/api/devices/{id}/disconnect` | derruba só esta TV |
+| POST | `/api/devices/{id}/command` | `identify` / `reload` no próximo heartbeat |
+| POST | `/api/devices/me/heartbeat` | TV conta o que está exibindo |
+| POST | `/api/account/disconnect-all` | derruba todas as TVs e celulares da conta |
+| DELETE | `/api/controllers/{id}` | tira o acesso de um celular |
 
 ## Segurança e limitações
 
 - Credenciais do FullTrack **nunca** são gravadas em disco. Ficam em memória, na
   sessão do backend, e são usadas para o **re-login automático**: quando o cookie
   do FullTrack cai, o backend refaz o login sozinho e a TV nem percebe.
-- O QR expira em 5 min; o token da TV **não expira** (`TRACKINFRA_APP_TOKEN_TTL=0`).
-  Só o token curto do handoff de configuração (celular) continua caindo em 15 min.
-- A TV só volta a exibir o QR em dois casos: **restart do backend** (as sessões são
-  em memória) ou **senha trocada no FullTrack** (o re-login passa a ser recusado e
-  o `/api/fleet` devolve 401). Instabilidade do FullTrack devolve 503 e a TV segue
-  com o último mosaico na tela, tentando de novo — não pisca para o QR.
+- O QR expira em 5 min; o token da TV **não expira**. O do celular-controle cai
+  após 7 dias sem uso; o do QR "Configurar", após 15 min sem uso.
+- A TV volta a exibir o QR quando: é **desconectada pelo celular** (ela mesma ou
+  "desconectar tudo"), a **senha é trocada no FullTrack** (o re-login é recusado
+  e a CONTA inteira cai — todas as TVs dividem essa senha), ou há **restart do
+  backend sem `PERSIST_SESSIONS`**. Nesses casos a API responde 401 com
+  `X-Session-Revoked: 1` e a TV vai para o QR na hora. 401 sem o header é
+  tolerado algumas vezes; instabilidade do FullTrack devolve 503 e a TV segue
+  com o último mosaico na tela.
 - Sobreviver a restart exigiria gravar a credencial em disco: **decisão consciente
   de não fazer**, é o trade-off de segurança que mantém a senha só na RAM.
 - Sessões em memória: para múltiplas instâncias, migrar `sessions.py` para Redis.

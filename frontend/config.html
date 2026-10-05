@@ -14,7 +14,9 @@
     <img class="card-logo" src="/assets/img/impacto-logo.svg" alt="Impacto"
          onerror="this.onerror=null;this.src='/assets/img/impacto-mark.svg'">
     <h1>Configurações</h1>
-    <p class="sub">Cada bloco abaixo é de uma parte do painel: o <b>FullTrack</b> (mosaico de veículos), o <b>SGI</b> (ordens de serviço) e a <b>exibição da TV</b> (como as duas telas se alternam).</p>
+    <p class="sub" id="dev-who" style="color:var(--brand);font-weight:700;margin-bottom:8px"></p>
+    <a class="to-devices" id="to-devices" href="/devices" hidden>Gerenciar todas as TVs →</a>
+    <p class="sub">Vale só para esta TV — as outras da conta têm a configuração delas. Cada bloco abaixo é de uma parte do painel: o <b>FullTrack</b> (mosaico de veículos), o <b>SGI</b> (ordens de serviço) e a <b>exibição da TV</b> (como as duas telas se alternam).</p>
 
     <!-- ============ FULLTRACK — mosaico de veículos ============ -->
     <section class="section">
@@ -56,7 +58,7 @@
          a cada abertura, nunca do localStorage. -->
     <section class="section">
       <h2><span class="tag sgi">SGI</span> Ordens de serviço</h2>
-      <p class="hint">Alimenta a tela de ordens e técnicos. O login não é gravado: depois de um reinício do sistema é preciso conectar de novo.</p>
+      <p class="hint">Alimenta a tela de ordens e técnicos. A <b>conexão</b> com o SGI é uma só, para todas as TVs; <b>equipe</b> e <b>tipo de OS</b> abaixo são só desta TV.</p>
       <p class="sub" id="sgi-state">Verificando…</p>
 
       <button class="secondary" id="sgi-enable" type="button" hidden>Habilitar SGI</button>
@@ -136,6 +138,7 @@
         <label class="check"><input type="checkbox" id="cf-techs-open"> Técnicos com a gaveta da OS aberta</label>
         <p class="hint">Na tela do SGI, mostra a OS de todos os técnicos ao mesmo tempo, em vez de abrir um por vez. Com muitos técnicos a fonte diminui para caber.</p>
       </div>
+      <p class="hint" id="cf-sgi-off" hidden>As opções do SGI ficam bloqueadas até ele ser conectado, no bloco <b>SGI</b> acima.</p>
       <button class="secondary" id="tv-save" type="button">Salvar exibição</button>
       <div class="msg" id="tv-msg"></div>
     </section>
@@ -143,7 +146,7 @@
     <button class="primary" id="save">Continuar — layout do mosaico</button>
     <p class="hint">Escolhe a grade, quantas telas por página e a ordem dos veículos.</p>
     <div class="msg" id="msg"></div>
-    <p class="sub" style="margin-top:16px"><a href="/" style="color:var(--accent)">← Voltar ao mosaico</a></p>
+    <p class="sub" style="margin-top:16px"><a href="/devices" style="color:var(--accent)">← Todas as TVs</a></p>
   </div>
 
   <!-- Layout do mosaico: abre depois de escolher os veiculos. "Seguir
@@ -184,6 +187,7 @@
     </div>
   </div>
 
+  <script src="/assets/js/session.js"></script>
   <script src="/assets/js/config.js"></script>
 </body>
 </html>

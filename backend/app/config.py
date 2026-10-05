@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # Tempos de vida (segundos)
     qr_session_ttl: int = 300          # validade do QR-code
     app_token_ttl: int = 0             # sessão da TV: 0 = nunca expira
+    # Celular que gerencia a conta (vincula/configura/desconecta TVs): expira
+    # depois deste tempo SEM USO. 7 dias: quem cuida das TVs não relogar toda
+    # semana, mas celular perdido não fica com acesso eterno. 0 = nunca.
+    controller_token_ttl: int = 7 * 24 * 3600
 
     # --- SGI (origem da tela secundária) ---
     # Sem usuário/senha aqui de propósito: quem habilita é o usuário, na tela de

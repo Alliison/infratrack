@@ -3,8 +3,8 @@
    - Monta um grid automático de mapas Leaflet (um por carro ligado).
    - Recentraliza cada mapa na posição do carro a cada atualização. */
 
-const TOKEN_KEY = "trackinfra_token";
-let token = localStorage.getItem(TOKEN_KEY);
+const TOKEN_KEY = TI.tokenKey;      // token da TV (ou do celular, no espelho)
+let token = TI.ls.get(TOKEN_KEY);
 let cfg = { only_ligados: true, selected_ids: [], zoom: 15, refresh_seconds: 6 };
 const tiles = new Map();   // id -> { map, marker, el, prev:[lat,lng] }
 let fleetTimer = null;
@@ -22,10 +22,11 @@ function stale(msg) { $("updated").textContent = msg; }
 
 /* ---------------- Autenticação por QR ---------------- */
 async function startAuth() {
-  $("auth").classList.add("show");
   stopFleet();
-  const r = await fetch("/api/auth/session", { method: "POST" });
-  const s = await r.json();
+  // Espelho no celular: sem QR — o token é o de controle e quem loga é a TV.
+  if (TI.watch) return stale("acesso do celular expirado — abra pelo painel de TVs");
+  $("auth").classList.add("show");
+  const s = await TI.newQr();
   $("qrimg").src = s.qr_url;
   $("authurl").value = s.login_url;
   $("authhint").textContent = "Aguardando leitura…";
@@ -42,7 +43,7 @@ async function pollAuth(uuid, deadline) {
     const s = await r.json();
     if (s.status === "authorized" && s.access_token) {
       token = s.access_token;
-      localStorage.setItem(TOKEN_KEY, token);
+      TI.authorized(s);
       $("auth").classList.remove("show");
       return boot();
     }
@@ -60,10 +61,14 @@ window.addEventListener("storage", (e) => {
 });
 
 /* ---------------- Ciclo de dados ---------------- */
+async function fetchCfg() {
+  const r = await fetch("/api/config" + TI.devParam(), { headers: TI.auth(token) });
+  if (r.ok) cfg = await r.json();
+}
+
 async function boot() {
-  try {
-    cfg = await (await fetch("/api/config")).json();
-  } catch (_) {}
+  TI.learnDevice(token);
+  try { await fetchCfg(); } catch (_) {}
   refreshFleet();
   clearInterval(fleetTimer);
   fleetTimer = setInterval(refreshFleet, Math.max(3, cfg.refresh_seconds || 6) * 1000);
@@ -74,20 +79,23 @@ function stopFleet() { clearInterval(fleetTimer); fleetTimer = null; }
 async function refreshFleet() {
   if (!token) return startAuth();
   // relê o mosaico salvo a cada ciclo — mudanças feitas no celular aplicam ao vivo
-  try { cfg = await (await fetch("/api/config")).json(); } catch (_) {}
+  try { await fetchCfg(); } catch (_) {}
   // O SGI só entra no rodízio se estiver de fato configurado (ligado no
   // backend agora — a flag salva sobrevive a restart, o login não).
   try { sgiReady = !!(await (await fetch("/api/sgi/status")).json()).enabled; }
   catch (_) { /* mantém o último valor */ }
   let list;
   try {
-    const r = await fetch("/api/fleet", { headers: { Authorization: `Bearer ${token}` } });
+    const r = await fetch("/api/fleet", { headers: TI.auth(token) });
     if (r.status === 401) {
       // O backend religa sozinho no FullTrack, então 401 aqui é sessão perdida
       // de vez (restart do backend ou senha trocada). Tolera blips antes de
       // mandar a TV para o QR — ela não deve piscar por um erro passageiro.
-      if (++authFails < AUTH_FAILS_MAX) return stale("reconectando…");
-      localStorage.removeItem(TOKEN_KEY); token = null; authFails = 0;
+      // Desconectada pelo celular (header de revogação): QR na hora.
+      if (!TI.revoked(r) && ++authFails < AUTH_FAILS_MAX) return stale("reconectando…");
+      authFails = 0;
+      if (TI.watch) { token = null; return startAuth(); }   // não apaga o token do celular por um espelho
+      TI.ls.del(TOKEN_KEY); token = null;
       return startAuth();
     }
     if (!r.ok) return stale("FullTrack indisponível — tentando de novo…");
@@ -99,6 +107,7 @@ async function refreshFleet() {
   ensureRotation();
   render(lastFleet);
   $("updated").textContent = "atualizado " + new Date().toLocaleTimeString("pt-BR");
+  TI.heartbeat(token, liveState);
 }
 
 /* ---------------- Grid + mapas ---------------- */
@@ -148,7 +157,10 @@ function ensureRotation() {
   if (rotState.on === on && rotState.secs === secs) return;
   rotState = { on, secs };
   clearInterval(rotateTimer); rotateTimer = null;
-  if (on) rotateTimer = setInterval(() => { page++; render(lastFleet); }, secs * 1000);
+  if (on) rotateTimer = setInterval(() => {
+    page++; render(lastFleet);
+    TI.heartbeat(token, liveState);   // o painel do celular acompanha a troca de página
+  }, secs * 1000);
 }
 
 // Página extra do rodízio: a tela do SGI, depois da última página de veículos.
@@ -169,12 +181,15 @@ $("sgi-frame").addEventListener("load", pushSgiVisibility);
 
 function showSgiPage(on, locked = false) {
   const f = $("sgi-frame");
-  if (on && !f.src) f.src = "/secondary";
+  if (on && !f.src) f.src = "/secondary" + TI.passQuery;
   f.classList.toggle("on", on);
   if (on !== sgiShown || locked !== sgiLocked) {
     sgiShown = on; sgiLocked = locked; pushSgiVisibility();
   }
 }
+
+// O que está na tela agora — vai no heartbeat para o painel do celular.
+let liveState = { screen: "fulltrack", page: "", showing: [], grid: "" };
 
 function render(fleet) {
   const mosaic = $("mosaic");
@@ -197,6 +212,7 @@ function render(fleet) {
   if (lock === "sgi" && sgiReady) {
     showSgiPage(true, true);
     $("page").textContent = "SGI · travado";
+    liveState = { screen: "sgi", page: "SGI · travado", showing: [], grid: "" };
     return;
   }
   // Travado no FullTrack: o SGI não entra, os grids seguem girando.
@@ -206,6 +222,7 @@ function render(fleet) {
   if (sgiOn && page % 2 === 1) {
     showSgiPage(true);
     $("page").textContent = `pág ${page + 1}/${steps} · SGI`;
+    liveState = { screen: "sgi", page: $("page").textContent, showing: [], grid: "" };
     return;
   }
   showSgiPage(false);
@@ -217,7 +234,10 @@ function render(fleet) {
   $("grid").textContent = ids.length ? `${rows}×${cols}` : "–";
   $("count").textContent = live;
   $("page").textContent = (rot && steps > 1 ? `pág ${page + 1}/${steps}` : "")
-    + (lock === "fulltrack" ? (rot && steps > 1 ? " · " : "") + "FullTrack travado" : "");
+    + (lock === "fulltrack" ? (rot && steps > 1 ? " · " : "") + "FullTrack travado" : "")
+    // Travada no SGI com o SGI fora do ar: cai no mosaico, mas diz isso — sem
+    // o aviso parece que a trava simplesmente não funciona.
+    + (lock === "sgi" ? (rot && steps > 1 ? " · " : "") + "SGI travado, mas desconectado" : "");
   mosaic.style.gridTemplateColumns = `repeat(${cols || 1}, 1fr)`;
   mosaic.style.gridTemplateRows = `repeat(${rows || 1}, 1fr)`;
 
@@ -241,6 +261,10 @@ function render(fleet) {
   mosaic.querySelectorAll(".tile.empty").forEach(e => mosaic.appendChild(e));
 
   setTimeout(() => tiles.forEach(t => t.map.invalidateSize()), 60);
+  liveState = {
+    screen: "fulltrack", page: $("page").textContent, grid: $("grid").textContent,
+    showing: ids.map(id => formatPlaca(byId.get(id).placa) || byId.get(id).modelo || id),
+  };
 }
 
 function createTile(car) {
@@ -324,6 +348,7 @@ function closeCfg() {
 $("cfgbtn").addEventListener("click", async (e) => {
   e.preventDefault();
   if (!token) return startAuth();
+  if (TI.watch) return;
   try {
     const r = await fetch("/api/config/handoff", {
       method: "POST", headers: { Authorization: `Bearer ${token}` },
@@ -413,4 +438,6 @@ setInterval(checkVersion, VERSION_EVERY_MS);
 setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("pt-BR"); }, 1000);
 
 /* ---------------- Início ---------------- */
+// Espelho: o botão "Configurar" é da TV física, não do celular que a observa.
+if (TI.watch) { $("cfgbtn").hidden = true; document.body.classList.add("watch"); }
 if (token) boot(); else startAuth();

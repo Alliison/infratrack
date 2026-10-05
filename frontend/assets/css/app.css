@@ -577,3 +577,53 @@ button.secondary:hover { color: var(--text); border-color: var(--brand); }
    .check devolve caixa e texto para a mesma linha. */
 .field input[type="checkbox"] { width: 18px; height: 18px; flex: none; }
 .field label.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+
+/* ===== Gestão de TVs ===== */
+/* "Identificar" (comando do painel do celular): o nome da TV em tela cheia,
+   por cima de tudo — inclusive do iframe do SGI e do QR. */
+#ti-identify { position: fixed; inset: 0; z-index: 9000; display: none;
+  align-items: center; justify-content: center; text-align: center;
+  background: rgba(11,15,20,.88); color: var(--brand); font-weight: 800;
+  font-size: clamp(48px, 14vw, 220px); letter-spacing: 2px; padding: 4vw; }
+#ti-identify.show { display: flex; }
+
+/* Painel de TVs (celular) */
+.dev { border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin: 0 0 14px; }
+.dev.off { opacity: .75; }
+.dev-head { display: flex; align-items: center; gap: 10px; }
+.dev-head .dev-name { font-weight: 800; font-size: 17px; color: var(--text); flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--off); flex: none; }
+.dot.on { background: var(--on); box-shadow: 0 0 8px var(--on); }
+.dot.idle { background: #fbbf24; }
+.dev-state { font-size: 13px; color: var(--muted); margin: 6px 0 10px; line-height: 1.45; }
+.dev-state b { color: var(--text); font-weight: 700; }
+.plates { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.plate { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+  background: rgba(23,207,116,.12); color: var(--brand); letter-spacing: .5px; }
+.dev .choice { margin: 0 0 10px; }
+.dev .choice button { padding: 9px 4px; font-size: 13px; }
+.dev-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dev-actions button, .dev-actions a { width: 100%; padding: 10px 6px; border-radius: 10px; font-size: 13px;
+  border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer;
+  text-align: center; text-decoration: none; font-family: inherit; }
+.dev-actions button:hover, .dev-actions a:hover { color: var(--text); border-color: var(--brand); }
+.dev-actions .danger { color: var(--danger); border-color: rgba(239,68,68,.45); }
+.ctl-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--muted); }
+.ctl-row:last-child { border-bottom: 0; }
+.ctl-row .ctl-info { flex: 1; min-width: 0; }
+.ctl-row .ctl-info b { color: var(--text); display: block; font-size: 14px; }
+.ctl-row button { flex: none; padding: 7px 12px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  border: 1px solid rgba(239,68,68,.45); background: transparent; color: var(--danger); font-family: inherit; }
+button.danger { width: 100%; padding: 12px; border-radius: 10px; font-size: 14px; cursor: pointer;
+  border: 1px solid rgba(239,68,68,.55); background: rgba(239,68,68,.08); color: var(--danger);
+  font-weight: 700; font-family: inherit; }
+.pair-box { border: 1px solid var(--brand); border-radius: 12px; padding: 14px; margin: 0 0 18px;
+  background: rgba(23,207,116,.06); }
+.linkbtn { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0;
+  font-size: 14px; font-family: inherit; text-decoration: underline; }
+.to-devices { display: block; text-align: center; padding: 12px; margin: 0 0 18px; border-radius: 10px;
+  border: 1px solid var(--brand); color: var(--brand); text-decoration: none; font-weight: 700; }
+.to-devices[hidden] { display: none; }
+.choice button:disabled { opacity: .35; cursor: not-allowed; }

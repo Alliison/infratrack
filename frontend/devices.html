@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Impacto — TVs</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/img/impacto-mark.svg">
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body class="mobile">
+  <div class="card">
+    <img class="card-logo" src="/assets/img/impacto-logo.svg" alt="Impacto"
+         onerror="this.onerror=null;this.src='/assets/img/impacto-mark.svg'">
+    <h1>TVs</h1>
+
+    <!-- Sem token de controle (ou expirado/revogado) -->
+    <div id="noaccess" hidden>
+      <p class="sub">Este celular não está gerenciando nenhuma conta agora.</p>
+      <p class="hint">Escaneie o QR de login de uma TV e entre com a conta FullTrack — ou use o
+        botão <b>Configurar</b> de uma TV já ligada. A partir daí este celular gerencia todas as
+        TVs da conta.</p>
+    </div>
+
+    <div id="panel" hidden>
+      <p class="sub">Conta FullTrack <b id="account"></b>. Cada TV tem a sua configuração e pode ser
+        desconectada sozinha.</p>
+
+      <section class="section">
+        <h2><span class="tag tv">TV</span> Dispositivos</h2>
+        <div id="devices"><p class="hint">Carregando…</p></div>
+        <div class="msg" id="dev-msg"></div>
+      </section>
+
+      <section class="section">
+        <h2><span class="tag ft">+</span> Adicionar TV</h2>
+        <p class="hint" style="margin:0">Abra <b id="base-url"></b> no navegador da TV nova e escaneie
+          o QR com <b>este celular</b>: ela entra nesta conta sem pedir a senha do FullTrack.</p>
+      </section>
+
+      <section class="section">
+        <h2><span class="tag sgi">📱</span> Celulares com acesso</h2>
+        <p class="hint">Quem pode liberar, configurar e desconectar TVs desta conta.</p>
+        <div id="ctls"></div>
+      </section>
+
+      <button class="danger" id="kill-all" type="button">Desconectar todas as TVs e celulares</button>
+      <p class="hint">Todas as TVs voltam para o QR e a sessão do FullTrack sai do servidor. Nome e
+        configuração de cada TV ficam guardados: liberar de novo devolve tudo como estava.</p>
+    </div>
+  </div>
+
+  <script src="/assets/js/session.js"></script>
+  <script src="/assets/js/devices.js"></script>
+</body>
+</html>

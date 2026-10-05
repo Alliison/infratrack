@@ -1,9 +1,12 @@
-/* Configuração do mosaico salvo.
-   - No celular: aberto via QR com ?c=<uuid>, troca por um token curto (handoff).
-   - Na TV (fallback): usa o token guardado no localStorage. */
-const TOKEN_KEY = "trackinfra_token";
+/* Configuração de UMA TV (cada TV tem a sua).
+   - QR "Configurar" da TV: ?c=<uuid>, troca por um token de controle curto já
+     apontado para aquela TV (handoff).
+   - Painel de TVs do celular: ?d=<id da TV>, com o token de controle guardado.
+   - Na própria TV (fallback): token da TV, mexe só nela mesma. */
 const $ = (id) => document.getElementById(id);
 let token = null;
+let deviceId = null;       // null = a TV dona do token (fallback na própria TV)
+const dq = (prefix = "?") => deviceId ? `${prefix}device=${encodeURIComponent(deviceId)}` : "";
 let fleet = [];
 /* Array, não Set: a ORDEM em que os veículos são marcados é a sequência que o
    modal oferece. Um Set descartaria essa informação. */
@@ -14,13 +17,51 @@ let escolhaGrid = "auto";
 const CELULAS = { "2x2": 4, "2x3": 6 };
 
 async function resolveToken() {
-  const c = new URLSearchParams(location.search).get("c");
+  const qs = new URLSearchParams(location.search);
+  const c = qs.get("c");
   if (c) {
     const r = await fetch(`/api/config/handoff/${c}/redeem`, { method: "POST" });
     if (!r.ok) return null;
-    return (await r.json()).access_token;
+    const h = await r.json();
+    deviceId = h.device_id;
+    // URL sem o uuid (uso único): um F5 aqui não deve dar "QR expirado".
+    history.replaceState(null, "", `/config?d=${encodeURIComponent(deviceId)}`);
+    // Celular que já é controle desta mesma conta fica com o token dele (o do
+    // QR é curto); senão, este passa a ser o controle do celular.
+    const atual = TI.ls.get(TI.CTL_KEY);
+    if (atual) {
+      try {
+        const me = await (await fetch("/api/me", { headers: TI.auth(atual) })).json();
+        if (me.kind === "controller" && me.account === h.account) return atual;
+      } catch (_) {}
+    }
+    TI.ls.set(TI.CTL_KEY, h.access_token);
+    return h.access_token;
   }
-  return localStorage.getItem(TOKEN_KEY);
+  deviceId = qs.get("d");
+  const ctl = TI.ls.get(TI.CTL_KEY);
+  if (ctl && deviceId) return ctl;
+  deviceId = null;
+  return TI.ls.get(TI.TV_KEY);
+}
+
+/* "Configurando: TV da recepção" — sem isso, com duas TVs, ninguém sabe qual
+   está mexendo. */
+async function mostrarQuem() {
+  // Gestão de TVs é do celular-controle; com o token da própria TV não abre.
+  if (deviceId) $("to-devices").hidden = false;
+  try {
+    if (deviceId) {
+      const r = await fetch("/api/devices", { headers: TI.auth(token) });
+      if (r.ok) {
+        const d = (await r.json()).devices.find((x) => x.id === deviceId);
+        if (d) $("dev-who").textContent = `Configurando: ${d.name}`;
+        return;
+      }
+    }
+    const me = await (await fetch("/api/me", { headers: TI.auth(token) })).json();
+    if (me.device_name) $("dev-who").textContent = `Configurando: ${me.device_name}`;
+  } catch (_) {}
 }
 
 async function init() {
@@ -32,8 +73,12 @@ async function init() {
     $("save").disabled = true;
     return;
   }
+  mostrarQuem();
   let cfg = { selected_ids: [], only_ligados: true, zoom: 15, refresh_seconds: 6 };
-  try { cfg = await (await fetch("/api/config")).json(); } catch (_) {}
+  try {
+    const r = await fetch("/api/config" + dq(), { headers: TI.auth(token) });
+    if (r.ok) cfg = await r.json();
+  } catch (_) {}
   serverCfg = cfg;
   $("zoom").value = cfg.zoom;
   $("refresh").value = cfg.refresh_seconds;
@@ -47,7 +92,7 @@ async function init() {
   } catch (e) {
     $("list").innerHTML = "";
     $("msg").className = "msg err";
-    $("msg").textContent = "Sessão expirada. Refaça o login na TV.";
+    $("msg").textContent = "Acesso expirado. Abra de novo pelo QR \"Configurar\" da TV ou pelo painel de TVs.";
     return;
   }
   selected = [...(cfg.selected_ids || [])];
@@ -74,7 +119,20 @@ function sgiMsg(texto, classe = "msg") {
   $("sgi-msg").textContent = texto;
 }
 
+/* O que depende do SGI na exibição só pode ser LIGADO com ele conectado (o
+   backend também recusa). O que já estava ligado fica como está: desmarcar
+   continua possível, e o aviso no painel de TVs explica a situação. */
+function liberarOpcoesSgi(enabled) {
+  const opt = $("cf-lock").querySelector('option[value="sgi"]');
+  opt.disabled = !enabled && $("cf-lock").value !== "sgi";
+  opt.textContent = enabled ? "Só SGI" : "Só SGI (conecte o SGI primeiro)";
+  const rot = $("cf-sgi-rot");
+  rot.disabled = !enabled && !rot.checked;
+  $("cf-sgi-off").hidden = enabled;
+}
+
 function mostrarSgi({ enabled, username, expires_in, proactive_refresh, last_error }, jaHabilitou) {
+  liberarOpcoesSgi(enabled);
   $("sgi-enable").hidden = enabled;
   $("sgi-form").hidden = true;
   $("sgi-on").hidden = !enabled;
@@ -100,7 +158,7 @@ function mostrarSgi({ enabled, username, expires_in, proactive_refresh, last_err
 async function carregarSgi(jaHabilitou) {
   try {
     const st = await (await fetch("/api/sgi/status")).json();
-    mostrarSgi(st, jaHabilitou);
+    mostrarSgi(st, jaHabilitou || st.was_enabled === true);
     return st;
   } catch (_) {
     $("sgi-state").textContent = "Não foi possível consultar o estado do SGI.";
@@ -170,7 +228,7 @@ async function initSgi(cfg) {
   $("sgi-test").addEventListener("click", async () => {
     sgiMsg("Consultando o resumo de hoje…");
     try {
-      const r = await fetch("/api/sgi/summary", { headers: { Authorization: `Bearer ${token}` } });
+      const r = await fetch("/api/sgi/summary" + dq(), { headers: { Authorization: `Bearer ${token}` } });
       const body = await r.json();
       if (!r.ok) throw new Error(body.detail || `HTTP ${r.status}`);
       $("sgi-out").hidden = false;
@@ -214,7 +272,7 @@ async function salvarTipos() {
   const tipos = tiposSelecionados();
   const cfg = { ...base(), sgi_types: tipos };
   try {
-    const r = await fetch("/api/config", {
+    const r = await fetch("/api/config" + dq(), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(cfg),
@@ -277,7 +335,7 @@ async function salvarEquipe() {
   const valor = $("sgi-team").value || null;
   const cfg = { ...base(), sgi_team: valor };
   try {
-    const r = await fetch("/api/config", {
+    const r = await fetch("/api/config" + dq(), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(cfg),
@@ -426,19 +484,19 @@ async function salvar(cfg, botao, msgEl = $("msg"), okTexto = "Mosaico salvo! �
   msgEl.textContent = "Salvando…";
   botao.disabled = true;
   try {
-    const r = await fetch("/api/config", {
+    const r = await fetch("/api/config" + dq(), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(cfg),
     });
-    if (!r.ok) throw new Error();
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Erro ao salvar.");
     serverCfg = cfg;
     fecharConfirm();
     msgEl.className = "msg ok";
     msgEl.textContent = okTexto;
-  } catch (_) {
+  } catch (e) {
     msgEl.className = "msg err";
-    msgEl.textContent = "Erro ao salvar.";
+    msgEl.textContent = e.message || "Erro ao salvar.";
   } finally {
     botao.disabled = false;
   }

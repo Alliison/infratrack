@@ -2,8 +2,8 @@
    Página própria: nada de Leaflet, nada do mosaico da FullTrack. Reaproveita só
    o token de sessão da TV (mesmo QR de login) para chamar /api/sgi/summary. */
 
-const TOKEN_KEY = "trackinfra_token";
-let token = localStorage.getItem(TOKEN_KEY);
+const TOKEN_KEY = TI.tokenKey;      // token da TV (ou do celular, no espelho)
+let token = TI.ls.get(TOKEN_KEY);
 let refreshSeconds = 6;
 let secTimer = null;
 let authFails = 0;                 // 401 seguidos; só o limite abaixo volta ao QR
@@ -36,10 +36,12 @@ function stale(msg) { $("updated").textContent = msg; }
 
 /* ---------------- Autenticação por QR ---------------- */
 async function startAuth() {
-  $("auth").classList.add("show");
   clearInterval(secTimer); secTimer = null;
-  const r = await fetch("/api/auth/session", { method: "POST" });
-  const s = await r.json();
+  // Dentro do mosaico quem mostra o QR é ele (esta página só acompanha o token
+  // pelo evento "storage"); no espelho do celular não há QR nenhum.
+  if (!standalone || TI.watch) return stale(TI.watch ? "acesso do celular expirado" : "aguardando login…");
+  $("auth").classList.add("show");
+  const s = await TI.newQr();
   $("qrimg").src = s.qr_url;
   $("authurl").value = s.login_url;
   $("authhint").textContent = "Aguardando leitura…";
@@ -56,7 +58,7 @@ async function pollAuth(uuid, deadline) {
     const s = await r.json();
     if (s.status === "authorized" && s.access_token) {
       token = s.access_token;
-      localStorage.setItem(TOKEN_KEY, token);
+      TI.authorized(s);
       $("auth").classList.remove("show");
       return boot();
     }
@@ -76,7 +78,7 @@ window.addEventListener("storage", (e) => {
 /* ---------------- Ciclo de dados ---------------- */
 async function boot() {
   try {
-    const cfg = await (await fetch("/api/config")).json();
+    const cfg = await (await fetch("/api/config" + TI.devParam(), { headers: TI.auth(token) })).json();
     refreshSeconds = Math.max(3, cfg.refresh_seconds || 6);
   } catch (_) {}
   refreshSecondary();
@@ -89,7 +91,7 @@ async function boot() {
 let techsExpanded = false;
 async function refreshDisplayConfig() {
   try {
-    const cfg = await (await fetch("/api/config")).json();
+    const cfg = await (await fetch("/api/config" + TI.devParam(), { headers: TI.auth(token) })).json();
     techsExpanded = !!cfg.techs_expanded;
   } catch (_) {}
 }
@@ -99,13 +101,17 @@ async function refreshSecondary() {
   await refreshDisplayConfig();
   let body;
   try {
-    const r = await fetch("/api/sgi/summary", { headers: { Authorization: `Bearer ${token}` } });
+    const r = await fetch("/api/sgi/summary" + TI.devParam(), { headers: TI.auth(token) });
     if (r.status === 401) {
       // O backend religa sozinho no FullTrack, então 401 aqui é sessão perdida
       // de vez (restart do backend ou senha trocada). Tolera blips antes de
       // mandar a TV para o QR — ela não deve piscar por um erro passageiro.
-      if (++authFails < AUTH_FAILS_MAX) return stale("reconectando…");
-      localStorage.removeItem(TOKEN_KEY); token = null; authFails = 0;
+      if (!TI.revoked(r) && ++authFails < AUTH_FAILS_MAX) return stale("reconectando…");
+      authFails = 0;
+      // Só a página dona do token o apaga: no iframe quem decide é o mosaico,
+      // e no espelho o token é o do celular.
+      if (standalone && !TI.watch) TI.ls.del(TOKEN_KEY);
+      token = null;
       return startAuth();
     }
     body = await r.json();
@@ -116,6 +122,8 @@ async function refreshSecondary() {
 
   renderCompletion(body);
   $("updated").textContent = "atualizado " + new Date().toLocaleTimeString("pt-BR");
+  // Aberta direto numa TV (sem o mosaico em volta), é ela quem se reporta.
+  if (standalone) TI.heartbeat(token, { screen: "sgi", page: "SGI (página direta)", showing: [], grid: "" });
 }
 
 // SGI ainda não habilitado (ou credencial perdida no restart do backend): a
@@ -440,7 +448,7 @@ async function loadCityDetail(name) {
   if (!el) return;
   if (!el.childNodes.length) el.innerHTML = '<span class="loading">Carregando…</span>';
   try {
-    const r = await fetch(`/api/sgi/summary?city=${encodeURIComponent(name)}`,
+    const r = await fetch(`/api/sgi/summary?city=${encodeURIComponent(name)}${TI.devParam("&")}`,
       { headers: { Authorization: `Bearer ${token}` } });
     const body = await r.json();
     if (meu !== cityDetailToken) return;              // outra cidade foi aberta antes de voltar
@@ -512,7 +520,7 @@ function renderCategoryBreakdown(container, city, rows, meu) {
 
 async function fetchCategoryStatus(city, categoryId) {
   const r = await fetch(
-    `/api/sgi/summary?city=${encodeURIComponent(city)}&category_id=${encodeURIComponent(categoryId)}`,
+    `/api/sgi/summary?city=${encodeURIComponent(city)}&category_id=${encodeURIComponent(categoryId)}${TI.devParam("&")}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   const body = await r.json();
@@ -558,6 +566,7 @@ function closeCfg() {
 $("cfgbtn").addEventListener("click", async (e) => {
   e.preventDefault();
   if (!token) return startAuth();
+  if (TI.watch) return;
   try {
     const r = await fetch("/api/config/handoff", {
       method: "POST", headers: { Authorization: `Bearer ${token}` },
@@ -647,4 +656,5 @@ setInterval(checkVersion, VERSION_EVERY_MS);
 setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("pt-BR"); }, 1000);
 
 /* ---------------- Início ---------------- */
-if (token) boot(); else startAuth();
+if (TI.watch) $("cfgbtn").hidden = true;
+if (token) { TI.learnDevice(token); boot(); } else startAuth();

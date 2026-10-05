@@ -9,6 +9,25 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class SessionRequest(BaseModel):
+    """Corpo opcional do POST /api/auth/session: quem a TV era (se lembra)."""
+    device_id: Optional[str] = None
+
+
+class PairRequest(BaseModel):
+    """Celular já logado (token de controle) liberando uma TV nova, sem senha."""
+    session_uuid: str
+    name: Optional[str] = None
+
+
+class RenameRequest(BaseModel):
+    name: str
+
+
+class CommandRequest(BaseModel):
+    cmd: Literal["identify", "reload"]
+
+
 class SessionResponse(BaseModel):
     session_uuid: str
     login_url: str
@@ -19,6 +38,7 @@ class SessionResponse(BaseModel):
 class StatusResponse(BaseModel):
     status: str  # "pending" | "authorized" | "expired"
     access_token: Optional[str] = None
+    device_id: Optional[str] = None
 
 
 class Vehicle(BaseModel):
